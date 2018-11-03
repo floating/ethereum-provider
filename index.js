@@ -8,10 +8,7 @@ class EthereumProvider extends EventEmitter {
     this.promises = {}
     this.subscriptions = []
     this.connection = connection
-    this.connection.on('connect', () => {
-      this.checkNetwork()
-      this.defaultSubscriptions()
-    })
+    this.connection.on('connect', () => this.checkConnection())
     this.connection.on('close', () => this.emit('close'))
     this.connection.on('payload', payload => {
       const { id, method, error, result } = payload
@@ -25,24 +22,40 @@ class EthereumProvider extends EventEmitter {
         this.emit('data', payload) // Backwards Compatibility
       }
     })
+    this.on('newListener', (event, listener) => {
+      if (event === 'networkChanged') {
+        if (!this.attemptedNetworkSubscription && this.connected) this.startNetworkSubscription()
+      } else if (event === 'accountsChanged') {
+        if (!this.attemptedAccountsSubscription && this.connected) this.startAccountsSubscription()
+      }
+    })
   }
-  async checkNetwork () {
+  async checkConnection () {
     try {
-      this.connected = true
       this.emit('connect', await this._send('net_version'))
+      this.connected = true
+      if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
     } catch (e) {
       this.connected = false
-      // Error checking network
     }
   }
-  async defaultSubscriptions () {
+  async startNetworkSubscription () {
+    this.attemptedNetworkSubscription = true
     try {
-      let accountsChanged = await this.subscribe('eth_subscribe', 'accountsChanged')
       let networkChanged = await this.subscribe('eth_subscribe', 'networkChanged')
-      this.on(accountsChanged, accounts => this.emit('accountsChanged', accounts))
       this.on(networkChanged, netId => this.emit('networkChanged', netId))
     } catch (e) {
-      // Unable to subscribe to defaults: accountsChanged, networkChanged
+      console.warn('Unable to subscribe to networkChanged', e)
+    }
+  }
+  async startAccountsSubscription () {
+    this.attemptedAccountsSubscription = true
+    try {
+      let accountsChanged = await this.subscribe('eth_subscribe', 'accountsChanged')
+      this.on(accountsChanged, accounts => this.emit('accountsChanged', accounts))
+    } catch (e) {
+      console.warn('Unable to subscribe to accountsChanged', e)
     }
   }
   enable () {
