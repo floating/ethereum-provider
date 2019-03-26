@@ -85,6 +85,9 @@ class EthereumProvider extends EventEmitter {
   send (...args) { // Send can be clobbered, proxy sendPromise for backwards compatibility
     return this._send(...args)
   }
+  _sendBatch (requests) {
+    return Promise.all(requests.map(payload => this._send(payload.method, payload.params)))
+  }
   subscribe (type, method, params = []) {
     return this._send(type, [method, ...params]).then(id => {
       this.subscriptions.push(id)
@@ -103,8 +106,24 @@ class EthereumProvider extends EventEmitter {
   sendAsync (payload, cb) { // Backwards Compatibility
     if (!cb || typeof cb !== 'function') return cb(new Error('Invalid or undefined callback provided to sendAsync'))
     if (!payload) return cb(new Error('Invalid Payload'))
-    return this._send(payload.method, payload.params).then(result => {
-      cb(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
+    // sendAsync can be called with an array for batch requests used by web3.js 0.x
+    // this is not part of EIP-1193's backwards compatibility but we still want to support it
+    if (payload instanceof Array) {
+      return this.sendAsyncBatch(payload, cb)
+    } else {
+      return this._send(payload.method, payload.params).then(result => {
+        cb(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
+      }).catch(err => {
+        cb(err)
+      })
+    }
+  }
+  sendAsyncBatch (payload, cb) {
+    return this._sendBatch(payload).then((results) => {
+      let result = results.map((entry, index) => {
+        return { id: payload[index].id, jsonrpc: payload[index].jsonrpc, result: entry }
+      })
+      cb(null, result)
     }).catch(err => {
       cb(err)
     })
