@@ -19,6 +19,7 @@ class EthereumProvider extends EventEmitter {
         }
       } else if (method && method.indexOf('_subscription') > -1) { // Emit subscription result
         this.emit(payload.params.subscription, payload.params.result)
+        this.emit(method, payload.params) // Latest EIP-1193
         this.emit('data', payload) // Backwards Compatibility
       }
     })
