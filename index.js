@@ -18,13 +18,14 @@ class EthereumProvider extends EventEmitter {
           delete this.promises[id]
         }
       } else if (method && method.indexOf('_subscription') > -1) { // Emit subscription result
+        // Events: connect, disconnect, chainChanged, accountsChanged, message
         this.emit(payload.params.subscription, payload.params.result)
         this.emit(method, payload.params) // Latest EIP-1193
         this.emit('data', payload) // Backwards Compatibility
       }
     })
     this.on('newListener', (event, listener) => {
-      if (event === 'networkChanged') {
+      if (event === 'chainChanged') {
         if (!this.attemptedNetworkSubscription && this.connected) this.startNetworkSubscription()
       } else if (event === 'accountsChanged') {
         if (!this.attemptedAccountsSubscription && this.connected) this.startAccountsSubscription()
@@ -35,7 +36,7 @@ class EthereumProvider extends EventEmitter {
     try {
       this.emit('connect', await this._send('net_version'))
       this.connected = true
-      if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('chainChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
       if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
     } catch (e) {
       this.connected = false
@@ -44,10 +45,10 @@ class EthereumProvider extends EventEmitter {
   async startNetworkSubscription () {
     this.attemptedNetworkSubscription = true
     try {
-      let networkChanged = await this.subscribe('eth_subscribe', 'networkChanged')
-      this.on(networkChanged, netId => this.emit('networkChanged', netId))
+      let chainChanged = await this.subscribe('eth_subscribe', 'chainChanged')
+      this.on(chainChanged, netId => this.emit('chainChanged', netId))
     } catch (e) {
-      console.warn('Unable to subscribe to networkChanged', e)
+      console.warn('Unable to subscribe to chainChanged', e)
     }
   }
   async startAccountsSubscription () {
@@ -76,12 +77,19 @@ class EthereumProvider extends EventEmitter {
     })
   }
   _send (method, params = []) {
-    if (!method || typeof method !== 'string') return new Error('Method is not a valid string.')
-    if (!(params instanceof Array)) return new Error('Params is not a valid array.')
-    const payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
-    const promise = new Promise((resolve, reject) => { this.promises[payload.id] = { resolve, reject } })
-    this.connection.send(payload)
-    return promise
+    return new Promise((resolve, reject) => { 
+      const payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
+      this.promises[payload.id] = { resolve, reject } 
+      if (!method || typeof method !== 'string') {
+        this.promises[payload.id].reject(new Error('Method is not a valid string.'))
+        delete this.promises[payload.id]
+      } else if (!(params instanceof Array)){ 
+        this.promises[payload.id].reject(new Error('Params is not a valid array.'))
+        delete this.promises[payload.id]
+      } else {
+        this.connection.send(payload)    
+      }
+    })   
   }
   send (...args) { // Send can be clobbered, proxy sendPromise for backwards compatibility
     return this._send(...args)
@@ -138,6 +146,9 @@ class EthereumProvider extends EventEmitter {
     let error = new Error(`Provider closed, subscription lost, please subscribe again.`)
     this.subscriptions.forEach(id => this.emit(id, error)) // Send Error objects to any open subscriptions
     this.subscriptions = [] // Clear subscriptions
+  }
+  request (payload) {
+    return this._send(payload.method, payload.params)
   }
 }
 
