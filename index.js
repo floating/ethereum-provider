@@ -25,10 +25,13 @@ class EthereumProvider extends EventEmitter {
       }
     })
     this.on('newListener', (event, listener) => {
-      if (event === 'chainChanged') {
-        if (!this.attemptedNetworkSubscription && this.connected) this.startNetworkSubscription()
-      } else if (event === 'accountsChanged') {
-        if (!this.attemptedAccountsSubscription && this.connected) this.startAccountsSubscription()
+      if (event === 'chainChanged' && !this.attemptedChainSubscription && this.connected) {
+        this.startChainSubscription()
+      } else if (event === 'accountsChanged' && !this.attemptedAccountsSubscription && this.connected) {
+        this.startAccountsSubscription()
+      } else if (event === 'networkChanged' && !this.attemptedNetworkSubscription && this.connected) {
+        this.startNetworkSubscription()
+        console.warn('The networkChanged event is being deprecated, use chainChainged instead')
       }
     })
   }
@@ -36,7 +39,8 @@ class EthereumProvider extends EventEmitter {
     try {
       this.emit('connect', await this._send('net_version'))
       this.connected = true
-      if (this.listenerCount('chainChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
       if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
     } catch (e) {
       this.connected = false
@@ -44,6 +48,15 @@ class EthereumProvider extends EventEmitter {
   }
   async startNetworkSubscription () {
     this.attemptedNetworkSubscription = true
+    try {
+      let networkChanged = await this.subscribe('eth_subscribe', 'networkChanged')
+      this.on(networkChanged, netId => this.emit('networkChanged', netId))
+    } catch (e) {
+      console.warn('Unable to subscribe to networkChanged', e)
+    }
+  }
+  async startChainSubscription () {
+    this.attemptedChainSubscription = true
     try {
       let chainChanged = await this.subscribe('eth_subscribe', 'chainChanged')
       this.on(chainChanged, netId => this.emit('chainChanged', netId))
