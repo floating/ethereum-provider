@@ -3,6 +3,17 @@ const EventEmitter = require('events')
 class EthereumProvider extends EventEmitter {
   constructor (connection) {
     super()
+    this.enable = this.enable.bind(this)
+    this._send = this._send.bind(this)
+    this.send = this.send.bind(this)
+    this._sendBatch = this._sendBatch.bind(this)
+    this.subscribe = this.subscribe.bind(this)
+    this.unsubscribe = this.unsubscribe.bind(this)
+    this.sendAsync = this.sendAsync.bind(this)
+    this.sendAsyncBatch = this.sendAsyncBatch.bind(this)
+    this.isConnected = this.isConnected.bind(this)
+    this.close = this.close.bind(this)
+    this.request = this.request .bind(this)
     this.connected = false
     this.nextId = 0
     this.promises = {}
@@ -126,6 +137,7 @@ class EthereumProvider extends EventEmitter {
     })
   }
   sendAsync (payload, cb) { // Backwards Compatibility
+    console.log('sendAsync', payload)
     if (!cb || typeof cb !== 'function') return cb(new Error('Invalid or undefined callback provided to sendAsync'))
     if (!payload) return cb(new Error('Invalid Payload'))
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
@@ -141,6 +153,7 @@ class EthereumProvider extends EventEmitter {
     }
   }
   sendAsyncBatch (payload, cb) {
+    console.log('sendAsyncBatch', payload)
     return this._sendBatch(payload).then((results) => {
       let result = results.map((entry, index) => {
         return { id: payload[index].id, jsonrpc: payload[index].jsonrpc, result: entry }
