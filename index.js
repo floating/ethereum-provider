@@ -137,7 +137,6 @@ class EthereumProvider extends EventEmitter {
     })
   }
   sendAsync (payload, cb) { // Backwards Compatibility
-    console.log('sendAsync', payload)
     if (!cb || typeof cb !== 'function') return cb(new Error('Invalid or undefined callback provided to sendAsync'))
     if (!payload) return cb(new Error('Invalid Payload'))
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
@@ -153,7 +152,6 @@ class EthereumProvider extends EventEmitter {
     }
   }
   sendAsyncBatch (payload, cb) {
-    console.log('sendAsyncBatch', payload)
     return this._sendBatch(payload).then((results) => {
       let result = results.map((entry, index) => {
         return { id: payload[index].id, jsonrpc: payload[index].jsonrpc, result: entry }
