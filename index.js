@@ -115,12 +115,20 @@ class EthereumProvider extends EventEmitter {
 
   _send (method, params = []) {
     return new Promise((resolve, reject) => {
-      const payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
+      let payload
+      if (typeof method === 'object' && method !== null) {
+        payload = method
+        payload.params = payload.params || []
+        payload.jsonrpc = '2.0'
+        payload.id = this.nextId++
+      } else {
+        payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
+      }
       this.promises[payload.id] = { resolve, reject }
-      if (!method || typeof method !== 'string') {
+      if (!payload.method || typeof payload.method !== 'string') {
         this.promises[payload.id].reject(new Error('Method is not a valid string.'))
         delete this.promises[payload.id]
-      } else if (!(params instanceof Array)) {
+      } else if (!(payload.params instanceof Array)) {
         this.promises[payload.id].reject(new Error('Params is not a valid array.'))
         delete this.promises[payload.id]
       } else {
@@ -159,6 +167,8 @@ class EthereumProvider extends EventEmitter {
     if (!payload) return cb(new Error('Invalid Payload'))
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
+    payload.jsonrpc = '2.0'
+    payload.id = payload.id || this.nextId++
     if (payload instanceof Array) {
       return this.sendAsyncBatch(payload, cb)
     } else {
