@@ -15,5 +15,7 @@
   "devDependencies": {
     "standard": "16.0.3"
   },
-  "dependencies": {}
+  "dependencies": {
+    "eventemitter3": "^4.0.7"
+  }
 }
