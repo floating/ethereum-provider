@@ -1,6 +1,6 @@
 {
   "name": "ethereum-provider",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A standalone EthereumProvider class, just supply the connection",
   "main": "index.js",
   "scripts": {
@@ -16,6 +16,6 @@
     "standard": "16.0.3"
   },
   "dependencies": {
-    "eventemitter3": "^4.0.7"
+    "events": "3.2.0"
   }
 }
