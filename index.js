@@ -66,7 +66,7 @@ class EthereumProvider extends EventEmitter {
       this.networkVersion = await this._send('net_version')
       this.chainId = await this._send('eth_chainId')
 
-      this.emit('connect', this.chainId)
+      this.emit('connect', { chainId: this.chainId })
       this.connected = true
 
       if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
