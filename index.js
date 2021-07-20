@@ -6,7 +6,6 @@ class EthereumProvider extends EventEmitter {
 
     this.enable = this.enable.bind(this)
     this._send = this._send.bind(this)
-    this._updateChain = this._updateChain.bind(this)
     this.send = this.send.bind(this)
     this._sendBatch = this._sendBatch.bind(this)
     this.subscribe = this.subscribe.bind(this)
@@ -19,9 +18,6 @@ class EthereumProvider extends EventEmitter {
     this.connected = false
 
     this.nextId = 0
-    this.chainId = '0x00'
-    this.networkVersion = 0
-    this.selectedAddress = ''
 
     this.promises = {}
     this.subscriptions = []
@@ -67,8 +63,12 @@ class EthereumProvider extends EventEmitter {
 
   async checkConnection () {
     try {
-      this.emit('connect', await this._send('net_version'))
+      this.networkVersion = await this._send('net_version')
+      this.chainId = await this._send('eth_chainId')
+
+      this.emit('connect', this.chainId)
       this.connected = true
+
       if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
       if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
       if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
@@ -82,7 +82,7 @@ class EthereumProvider extends EventEmitter {
     try {
       const networkChanged = await this.subscribe('eth_subscribe', 'networkChanged')
       this.on(networkChanged, netId => {
-        this._updateChain(netId)
+        this.networkVersion = netId
         this.emit('networkChanged', netId)
       })
     } catch (e) {
@@ -95,7 +95,7 @@ class EthereumProvider extends EventEmitter {
     try {
       const chainChanged = await this.subscribe('eth_subscribe', 'chainChanged')
       this.on(chainChanged, netId => {
-        this._updateChain(netId)
+        this.chainId = netId
         this.emit('chainChanged', netId)
       })
     } catch (e) {
@@ -118,12 +118,7 @@ class EthereumProvider extends EventEmitter {
 
   enable () {
     return new Promise((resolve, reject) => {
-      const ethAccounts = this._send('eth_accounts')
-      const netVersion = this._send('net_version')
-        .then(this._updateChain)
-        .catch(err => console.error(`could not get network version: `, err))
-
-      Promise.all([netVersion, ethAccounts]).then(([network, accounts]) => {
+      this._send('eth_accounts').then(accounts => {
         if (accounts.length > 0) {
           this.accounts = accounts
           this.selectedAddress = accounts[0]
@@ -137,16 +132,6 @@ class EthereumProvider extends EventEmitter {
         }
       }).catch(reject)
     })
-  }
-
-  _updateChain (netId) {
-    if (netId.startsWith('0x')) {
-      this.networkVersion = parseInt(netId, 16).toString()
-      this.chainId = netId
-    } else {
-      this.networkVersion = netId
-      this.chainId = '0x' + parseInt(this.networkVersion).toString(16)
-    }
   }
 
   _send (method, params = []) {
@@ -237,6 +222,10 @@ class EthereumProvider extends EventEmitter {
     const error = new Error('Provider closed, subscription lost, please subscribe again.')
     this.subscriptions.forEach(id => this.emit(id, error)) // Send Error objects to any open subscriptions
     this.subscriptions = [] // Clear subscriptions
+
+    this.chainId = undefined
+    this.networkVersion = undefined
+    this.selectedAddress = undefined
   }
 
   request (payload) {
