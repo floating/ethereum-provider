@@ -3,6 +3,7 @@ const EventEmitter = require('events')
 class EthereumProvider extends EventEmitter {
   constructor (connection) {
     super()
+
     this.enable = this.enable.bind(this)
     this._send = this._send.bind(this)
     this._updateChain = this._updateChain.bind(this)
