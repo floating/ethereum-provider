@@ -17,7 +17,7 @@ class EthereumProvider extends EventEmitter {
     this.request = this.request.bind(this)
     this.connected = false
 
-    this.nextId = 0
+    this.nextId = 1
 
     this.promises = {}
     this.subscriptions = []
@@ -164,13 +164,16 @@ class EthereumProvider extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (this.connected) {
-          return resolve(new Promise(sendFn))
-        }
+      const resolveSend = () => {
+        return resolve(new Promise(sendFn))
+      }
 
-        reject(new Error('Not connected'))
-      }, 1000)
+      this.on('connect', resolveSend)
+
+      setTimeout(() => {
+        this.off('connect', resolveSend)
+        reject(new Error('provider is not connected'))
+      }, 5000)
     })
   }
 
