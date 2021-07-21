@@ -172,7 +172,7 @@ class EthereumProvider extends EventEmitter {
 
       setTimeout(() => {
         this.off('connect', resolveSend)
-        reject(new Error('provider is not connected'))
+        reject(new Error('Not connected'))
       }, 5000)
     })
   }
