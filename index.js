@@ -63,8 +63,8 @@ class EthereumProvider extends EventEmitter {
 
   async checkConnection () {
     try {
-      this.networkVersion = await this._send('net_version')
-      this.chainId = await this._send('eth_chainId')
+      this.networkVersion = await this._send('net_version', [], false)
+      this.chainId = await this._send('eth_chainId', [], false)
 
       this.emit('connect', { chainId: this.chainId })
       this.connected = true
@@ -123,7 +123,9 @@ class EthereumProvider extends EventEmitter {
           this.accounts = accounts
           this.selectedAddress = accounts[0]
           this.coinbase = accounts[0]
+
           this.emit('enable')
+
           resolve(accounts)
         } else {
           const err = new Error('User Denied Full Provider')
@@ -134,8 +136,8 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  _send (method, params = []) {
-    return new Promise((resolve, reject) => {
+  _send (method, params = [], waitForConnection = true) {
+    const sendFn = (resolve, reject) => {
       let payload
       if (typeof method === 'object' && method !== null) {
         payload = method
@@ -155,6 +157,20 @@ class EthereumProvider extends EventEmitter {
       } else {
         this.connection.send(payload)
       }
+    }
+
+    if (this.connected || !waitForConnection) {
+      return new Promise(sendFn)
+    }
+
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (this.connected) {
+          return resolve(new Promise(sendFn))
+        }
+
+        reject('provider is not connected')
+      }, 1000)
     })
   }
 
