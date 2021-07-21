@@ -1,10 +1,10 @@
 {
   "name": "ethereum-provider",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A standalone EthereumProvider class, just supply the connection",
   "main": "index.js",
   "scripts": {
-    "test": "standard --fix"
+    "test": "standard --fix && mocha"
   },
   "author": {
     "name": "Jordan Muir",

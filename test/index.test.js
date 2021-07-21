@@ -5,6 +5,11 @@ const { EventEmitter } = require('stream')
 const EthereumProvider = require('../')
 
 class TestConnection extends EventEmitter {
+  constructor () {
+    super()
+    setTimeout(() => this.emit('connect'), 0)
+  }
+
   send (payload) {
     let result
 

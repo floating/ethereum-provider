@@ -169,7 +169,7 @@ class EthereumProvider extends EventEmitter {
           return resolve(new Promise(sendFn))
         }
 
-        reject('provider is not connected')
+        reject(new Error('Provider is not connected'))
       }, 1000)
     })
   }
