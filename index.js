@@ -66,8 +66,8 @@ class EthereumProvider extends EventEmitter {
       this.networkVersion = await this._send('net_version', [], false)
       this.chainId = await this._send('eth_chainId', [], false)
 
-      this.emit('connect', { chainId: this.chainId })
       this.connected = true
+      this.emit('connect', { chainId: this.chainId })
 
       if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
       if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
@@ -168,12 +168,15 @@ class EthereumProvider extends EventEmitter {
         return resolve(new Promise(sendFn))
       }
 
-      this.on('connect', resolveSend)
-
-      setTimeout(() => {
+      const disconnectTimer = setTimeout(() => {
         this.off('connect', resolveSend)
         reject(new Error('Not connected'))
       }, 5000)
+
+      this.once('connect', () => {
+        clearTimeout(disconnectTimer)
+        resolveSend()
+      })
     })
   }
 
