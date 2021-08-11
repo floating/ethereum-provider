@@ -61,18 +61,26 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  async checkConnection () {
+  async checkConnection (retry) {
+    if (this.checkConnectionRunning || this.connected) return
+    this.checkConnectionRunning = true
     try {
       this.networkVersion = await this._send('net_version', [], false)
       this.chainId = await this._send('eth_chainId', [], false)
 
+      this.checkConnectionRunning = false
       this.connected = true
       this.emit('connect', { chainId: this.chainId })
+
+      clearTimeout(this.checkConnectionTimer)
 
       if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
       if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
       if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
     } catch (e) {
+      if (!retry) setTimeout(() => this.checkConnection(true), 1000)
+      this.checkConnectionTimer = setInterval(() => this.checkConnection(true), 4000)
+      this.checkConnectionRunning = false
       this.connected = false
     }
   }
@@ -165,6 +173,7 @@ class EthereumProvider extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const resolveSend = () => {
+        clearTimeout(disconnectTimer)
         return resolve(new Promise(sendFn))
       }
 
@@ -173,10 +182,7 @@ class EthereumProvider extends EventEmitter {
         reject(new Error('Not connected'))
       }, 5000)
 
-      this.once('connect', () => {
-        clearTimeout(disconnectTimer)
-        resolveSend()
-      })
+      this.once('connect', resolveSend)
     })
   }
 
