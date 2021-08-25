@@ -30,18 +30,12 @@ class TestConnection extends EventEmitter {
   }
 
   send (payload) {
-    let response
+    let response = (!!this.requestHandler && this.requestHandler(payload))
 
-    if (this.requestHandler) {
-      response = this.requestHandler(payload)
-    } else {
-      if (payload.method === 'eth_accounts') {
-        response = { result: ['0x58c99d4AfAd707268067d399d784c2c8a763B1De'] }
-      } else if (payload.method === 'net_version') {
-        response = { result: '4' }
-      } else if (payload.method === 'eth_chainId') {
-        response = { result: '0x4' }
-      }
+    if (!response) {
+      if (payload.method === 'eth_chainId') response = { result: '0x4' }
+      else if (payload.method === 'net_version') response = { result: '4' }
+      else response = { error: 'unsupported request' }
     }
 
     this.emit('payload', { id: payload.id, method: payload.method, ...response })
@@ -59,6 +53,12 @@ describe('non-standard interface', function () {
   this.timeout(500)
 
   beforeEach(function (done) {
+    connection._setRequestHandler(payload => {
+      if (payload.method === 'eth_accounts') {
+        return { result: ['0x58c99d4AfAd707268067d399d784c2c8a763B1De'] }
+      }
+    })
+
     provider.once('connect', () => provider.enable())
     provider.once('enable', done)
 
