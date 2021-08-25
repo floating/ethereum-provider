@@ -56,14 +56,18 @@ beforeEach(function () {
 })
 
 describe('non-standard interface', function () {
-  beforeEach(async function () {
-    await provider.enable()
-    await provider.checkConnection()
+  this.timeout(500)
+
+  beforeEach(function (done) {
+    provider.once('connect', () => provider.enable())
+    provider.once('enable', done)
+
+    connection._connect()
   })
 
-  it('exposes the current chainId', () => assert(provider.chainId === '0x4'))
-  it('exposes the current network version', () => assert(provider.networkVersion === '4'))
-  it('exposes the currently selected account', () => assert(provider.selectedAddress === '0x58c99d4AfAd707268067d399d784c2c8a763B1De'))
+  it('exposes the current chainId', () => expect(provider.chainId).to.equal('0x4'))
+  it('exposes the current network version', () => expect(provider.networkVersion).to.equal('4'))
+  it('exposes the currently selected account', () => expect(provider.selectedAddress).to.equal('0x58c99d4AfAd707268067d399d784c2c8a763B1De'))
 })
 
 describe('connecting', function () {
@@ -91,23 +95,43 @@ describe('sending requests', function () {
   
   it('handles a request with just a method', async function () {
     const accounts = ['0x58c99d4AfAd707268067d399d784c2c8a763B1De']
-    connection._setRequestHandler(() => ({ result: accounts }))
+
+    connection._setRequestHandler(payload => 
+      (payload.method === 'eth_accounts' && payload.params.length === 0)
+      ? { result: accounts }
+      : { error: 'unsupported method' }
+    )
 
     return expect(provider.send('eth_accounts')).to.become(accounts)
   })
   
-  it.skip('handles a request with a method and params', async function () {
-    const accounts = ['0x58c99d4AfAd707268067d399d784c2c8a763B1De']
-    connection._setRequestHandler(() => ({ result: accounts }))
+  it('handles a request with a method and params', async function () {
+    const block = '0x1b4'
 
-    return expect(provider.send('eth_accounts')).to.become(accounts)
+    connection._setRequestHandler(payload => 
+      (payload.method === 'eth_getBlockByNumber' &&
+        payload.params[0] === 'latest' &&
+        payload.params[1] === true)
+      ? { result: block }
+      : { error: 'unsupported method' }
+    )
+
+    return expect(provider.send('eth_getBlockByNumber', ['latest', true])).to.become(block)
   })
   
-  it.skip('handles a request with a payload object', async function () {
-    const accounts = ['0x58c99d4AfAd707268067d399d784c2c8a763B1De']
-    connection._setRequestResponse({ result: accounts })
+  it('handles a request with a payload object', async function () {
+    const block = '0x1b4'
+    const request = { method: 'eth_getBlockByNumber', params: ['latest', true] }
 
-    return expect(provider.send('eth_accounts')).to.become(accounts)
+    connection._setRequestHandler(payload => 
+      (payload.method === 'eth_getBlockByNumber' &&
+        payload.params[0] === 'latest' &&
+        payload.params[1] === true)
+      ? { result: block }
+      : { error: 'unsupported method' }
+    )
+
+    return expect(provider.send(request)).to.become(block)
   })
   
   it('responds with an error from the connection', async function () {

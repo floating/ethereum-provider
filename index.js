@@ -24,9 +24,17 @@ class EthereumProvider extends EventEmitter {
     this.subscriptions = []
     this.connection = connection
 
-    this.connection.on('connect', () => {
+    this.connection.on('connect', async () => {
       this.connected = true
+
+      this.networkVersion = await this._send('net_version')
+      this.chainId = await this._send('eth_chainId')
+
       this.emit('connect')
+
+      if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
     })
 
     this.connection.on('close', () => {
@@ -129,13 +137,13 @@ class EthereumProvider extends EventEmitter {
   }
 
   _createPayload (...payloadData) {
-    const payload = (payloadData.length === 1 && typeof payloadData[0] === 'object' && payloadData[0] !== null)
+    const payload = (!!payloadData[0] && typeof payloadData[0] === 'object')
       ? payloadData[0]
       : { method: payloadData[0], params: payloadData[1] }
 
     return {
       method: payload.method,
-      params: payload.parms || [],
+      params: payload.params || [],
       jsonrpc: '2.0',
       id: this.nextId++,
     }
