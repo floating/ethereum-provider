@@ -5,6 +5,7 @@ class EthereumProvider extends EventEmitter {
     super()
 
     this.enable = this.enable.bind(this)
+    this._createPayload = this._createPayload.bind(this)
     this._send = this._send.bind(this)
     this.send = this.send.bind(this)
     this._sendBatch = this._sendBatch.bind(this)
@@ -22,12 +23,18 @@ class EthereumProvider extends EventEmitter {
     this.promises = {}
     this.subscriptions = []
     this.connection = connection
-    this.connection.on('connect', () => this.checkConnection())
+
+    this.connection.on('connect', () => {
+      this.connected = true
+      this.emit('connect')
+    })
+
     this.connection.on('close', () => {
       this.connected = false
       this.emit('close')
       this.emit('disconnect')
     })
+
     this.connection.on('payload', payload => {
       const { id, method, error, result } = payload
       if (typeof id !== 'undefined') {
@@ -49,6 +56,7 @@ class EthereumProvider extends EventEmitter {
         this.emit('data', payload) // Backwards Compatibility
       }
     })
+
     this.on('newListener', (event, listener) => {
       if (event === 'chainChanged' && !this.attemptedChainSubscription && this.connected) {
         this.startChainSubscription()
@@ -59,30 +67,6 @@ class EthereumProvider extends EventEmitter {
         console.warn('The networkChanged event is being deprecated, use chainChainged instead')
       }
     })
-  }
-
-  async checkConnection (retry) {
-    if (this.checkConnectionRunning || this.connected) return
-    this.checkConnectionRunning = true
-    try {
-      this.networkVersion = await this._send('net_version', [], false)
-      this.chainId = await this._send('eth_chainId', [], false)
-
-      this.checkConnectionRunning = false
-      this.connected = true
-      this.emit('connect', { chainId: this.chainId })
-
-      clearTimeout(this.checkConnectionTimer)
-
-      if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
-      if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
-      if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
-    } catch (e) {
-      if (!retry) setTimeout(() => this.checkConnection(true), 1000)
-      this.checkConnectionTimer = setInterval(() => this.checkConnection(true), 4000)
-      this.checkConnectionRunning = false
-      this.connected = false
-    }
   }
 
   async startNetworkSubscription () {
@@ -144,18 +128,25 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  _send (method, params = [], waitForConnection = true) {
-    const sendFn = (resolve, reject) => {
-      let payload
-      if (typeof method === 'object' && method !== null) {
-        payload = method
-        payload.params = payload.params || []
-        payload.jsonrpc = '2.0'
-        payload.id = this.nextId++
-      } else {
-        payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
-      }
+  _createPayload (...payloadData) {
+    const payload = (payloadData.length === 1 && typeof payloadData[0] === 'object' && payloadData[0] !== null)
+      ? payloadData[0]
+      : { method: payloadData[0], params: payloadData[1] }
+
+    return {
+      method: payload.method,
+      params: payload.parms || [],
+      jsonrpc: '2.0',
+      id: this.nextId++,
+    }
+  }
+
+  _send (method, params = []) {
+    return new Promise((resolve, reject) => {
+      const payload = this._createPayload(method, params)
+
       this.promises[payload.id] = { resolve, reject }
+
       if (!payload.method || typeof payload.method !== 'string') {
         this.promises[payload.id].reject(new Error('Method is not a valid string.'))
         delete this.promises[payload.id]
@@ -165,24 +156,6 @@ class EthereumProvider extends EventEmitter {
       } else {
         this.connection.send(payload)
       }
-    }
-
-    if (this.connected || !waitForConnection) {
-      return new Promise(sendFn)
-    }
-
-    return new Promise((resolve, reject) => {
-      const resolveSend = () => {
-        clearTimeout(disconnectTimer)
-        return resolve(new Promise(sendFn))
-      }
-
-      const disconnectTimer = setTimeout(() => {
-        this.off('connect', resolveSend)
-        reject(new Error('Not connected'))
-      }, 5000)
-
-      this.once('connect', resolveSend)
     })
   }
 
