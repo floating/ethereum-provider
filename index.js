@@ -32,6 +32,15 @@ class EthereumProvider extends EventEmitter {
       const { id, method, error, result } = payload
       if (typeof id !== 'undefined') {
         if (this.promises[id]) { // Fulfill promise
+          const requestMethod = this.promises[id].method
+          if (requestMethod && ['eth_accounts', 'eth_requestAccounts'].includes(requestMethod)) {
+            const accounts = result || []
+
+            this.accounts = accounts
+            this.selectedAddress = accounts[0]
+            this.coinbase = accounts[0]
+          }
+
           payload.error ? this.promises[id].reject(error) : this.promises[id].resolve(result)
           delete this.promises[id]
         }
@@ -155,7 +164,7 @@ class EthereumProvider extends EventEmitter {
       } else {
         payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
       }
-      this.promises[payload.id] = { resolve, reject }
+      this.promises[payload.id] = { resolve, reject, method }
       if (!payload.method || typeof payload.method !== 'string') {
         this.promises[payload.id].reject(new Error('Method is not a valid string.'))
         delete this.promises[payload.id]
