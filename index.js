@@ -34,9 +34,7 @@ class EthereumProvider extends EventEmitter {
         if (this.promises[id]) { // Fulfill promise
           const requestMethod = this.promises[id].method
           if (requestMethod && ['eth_accounts', 'eth_requestAccounts'].includes(requestMethod)) {
-            if ((result || []).length > 0) {
-              this.selectedAddress = result[0]
-            }
+            this.selectedAddress = (result || [])[0]
           }
 
           payload.error ? this.promises[id].reject(error) : this.promises[id].resolve(result)
