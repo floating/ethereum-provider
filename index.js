@@ -195,8 +195,24 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  send (...args) { // Send can be clobbered, proxy sendPromise for backwards compatibility
-    return this._send(...args)
+  send (methodOrPayload, callbackOrArgs) { // Send can be clobbered, proxy sendPromise for backwards compatibility
+    if (
+      typeof methodOrPayload === 'string' &&
+      (!callbackOrArgs || Array.isArray(callbackOrArgs))
+    ) {
+      return this._send(methodOrPayload, callbackOrArgs)
+      }
+
+    if (
+      methodOrPayload &&
+      typeof methodOrPayload === 'object' &&
+      typeof callbackOrArgs === 'function'
+    ) {
+      // a callback was passed to send(), forward everything to sendAsync()
+      return this.sendAsync(methodOrPayload, callbackOrArgs)
+    }
+
+    return this._sendSync(methodOrPayload)
   }
 
   _sendBatch (requests) {
@@ -247,6 +263,37 @@ class EthereumProvider extends EventEmitter {
     }).catch(err => {
       cb(err)
     })
+  }
+
+  _sendSync (payload) {
+    let result
+
+    switch (payload.method) {
+      case 'eth_accounts':
+        result = this.selectedAddress ? [this.selectedAddress] : []
+        break
+
+      case 'eth_coinbase':
+        result = this.selectedAddress || null
+        break
+
+      case 'eth_uninstallFilter':
+        this._send(payload)
+        result = true
+
+      case 'net_version':
+        result = this.networkVersion || null
+        break
+
+      default:
+        throw new Error(`unsupported method ${payload.method}`)
+    }
+
+    return {
+      id: payload.id,
+      jsonrpc: payload.jsonrpc,
+      result
+    }
   }
 
   isConnected () { // Backwards Compatibility
