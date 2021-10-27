@@ -168,7 +168,7 @@ class EthereumProvider extends EventEmitter {
       if (!payload.method || typeof payload.method !== 'string') {
         this.promises[payload.id].reject(new Error('Method is not a valid string.'))
         delete this.promises[payload.id]
-      } else if (!(payload.params instanceof Array)) {
+      } else if (!(Array.isArray(payload.params))) {
         this.promises[payload.id].reject(new Error('Params is not a valid array.'))
         delete this.promises[payload.id]
       } else {
@@ -201,7 +201,7 @@ class EthereumProvider extends EventEmitter {
       (!callbackOrArgs || Array.isArray(callbackOrArgs))
     ) {
       return this._send(methodOrPayload, callbackOrArgs)
-      }
+    }
 
     if (
       methodOrPayload &&
@@ -243,7 +243,7 @@ class EthereumProvider extends EventEmitter {
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
     payload.jsonrpc = '2.0'
     payload.id = payload.id || this.nextId++
-    if (payload instanceof Array) {
+    if (Array.isArray(payload instanceof Array)) {
       return this.sendAsyncBatch(payload, cb)
     } else {
       return this._send(payload.method, payload.params).then(result => {
