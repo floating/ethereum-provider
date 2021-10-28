@@ -244,7 +244,7 @@ class EthereumProvider extends EventEmitter {
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
     payload.jsonrpc = '2.0'
 
-    if (Array.isArray(payload instanceof Array)) {
+    if (Array.isArray(payload)) {
       return this.sendAsyncBatch(payload, cb)
     } else {
       return this._send(payload.method, payload.params).then(result => {
