@@ -84,7 +84,7 @@ class EthereumProvider extends EventEmitter {
       clearTimeout(this.checkConnectionTimer)
 
       if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
-      if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startNetworkSubscription()
+      if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startChainSubscription()
       if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
     } catch (e) {
       if (!retry) setTimeout(() => this.checkConnection(true), 1000)
