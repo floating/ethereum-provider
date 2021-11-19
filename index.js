@@ -169,9 +169,6 @@ class EthereumProvider extends EventEmitter {
       if (!payload.method || typeof payload.method !== 'string') {
         this.promises[payload.id].reject(new Error('Method is not a valid string.'))
         delete this.promises[payload.id]
-      } else if (!(Array.isArray(payload.params))) {
-        this.promises[payload.id].reject(new Error('Params is not a valid array.'))
-        delete this.promises[payload.id]
       } else {
         this.connection.send(payload)
       }
