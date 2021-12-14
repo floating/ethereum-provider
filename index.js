@@ -1,24 +1,6 @@
 const EventEmitter = require('events')
 
 class EthereumProvider extends EventEmitter {
-  eventHandlers = {
-    networkChanged: netId => {
-      this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId,
-      this.emit('networkChanged', this.networkVersion)
-    },
-    chainChanged: chainId => {
-      this.chainId = chainId
-      this.emit('chainChanged', chainId)
-    },
-    chainsChanged: chains => {
-      this.emit('chainsChanged', chains)
-    },
-    accountsChanged: accounts => {
-      this.selectedAddress = accounts[0]
-      this.emit('accountsChanged', accounts)
-    }
-  }
-
   constructor (connection) {
     super()
 
@@ -46,6 +28,7 @@ class EthereumProvider extends EventEmitter {
       this.emit('close')
       this.emit('disconnect')
     })
+
     this.connection.on('payload', payload => {
       const { id, method, error, result } = payload
       if (typeof id !== 'undefined') {
@@ -88,14 +71,32 @@ class EthereumProvider extends EventEmitter {
         }
       }
     })
+
+    this.eventHandlers = {
+      networkChanged: netId => {
+        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId,
+        this.emit('networkChanged', this.networkVersion)
+      },
+      chainChanged: chainId => {
+        this.chainId = chainId
+        this.emit('chainChanged', chainId)
+      },
+      chainsChanged: chains => {
+        this.emit('chainsChanged', chains)
+      },
+      accountsChanged: accounts => {
+        this.selectedAddress = accounts[0]
+        this.emit('accountsChanged', accounts)
+      }
+    }
   }
 
   async checkConnection (retry) {
     if (this.checkConnectionRunning || this.connected) return
     this.checkConnectionRunning = true
     try {
-      this.networkVersion = await this._send('net_version', [], '', false)
-      this.chainId = await this._send('eth_chainId', [], '', false)
+      this.networkVersion = await this._send('net_version', [], undefined, false)
+      this.chainId = await this._send('eth_chainId', [], undefined, false)
 
       this.checkConnectionRunning = false
       this.connected = true
