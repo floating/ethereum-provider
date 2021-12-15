@@ -46,7 +46,7 @@ class EthereumProvider extends EventEmitter {
           delete this.promises[id]
         }
       } else if (method && method.indexOf('_subscription') > -1) { // Emit subscription result
-        // Events: connect, disconnect, chainChanged, chainsChanged, accountsChanged, message
+        // Events: connect, disconnect, chainChanged, chainsChanged, accountsChanged, assetsChanged, message
         this.emit(payload.params.subscription, payload.params.result)
         this.emit(method, payload.params) // Older EIP-1193
         this.emit('message', { // Latest EIP-1193
@@ -87,6 +87,9 @@ class EthereumProvider extends EventEmitter {
       accountsChanged: accounts => {
         this.selectedAddress = accounts[0]
         this.emit('accountsChanged', accounts)
+      },
+      assetsChanged: assets => {
+        this.emit('assetsChanged', assets)
       }
     }
   }
