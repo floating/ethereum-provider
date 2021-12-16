@@ -4,7 +4,6 @@ class EthereumProvider extends EventEmitter {
   constructor (connection) {
     super()
 
-    console.log('using new one!')
     this.enable = this.enable.bind(this)
     this._send = this._send.bind(this)
     this.send = this.send.bind(this)
