@@ -4,6 +4,7 @@ class EthereumProvider extends EventEmitter {
   constructor (connection) {
     super()
 
+    console.log('using new one!')
     this.enable = this.enable.bind(this)
     this._send = this._send.bind(this)
     this.send = this.send.bind(this)
@@ -74,12 +75,16 @@ class EthereumProvider extends EventEmitter {
 
     this.eventHandlers = {
       networkChanged: netId => {
-        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId,
+        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId
+
         this.emit('networkChanged', this.networkVersion)
       },
       chainChanged: chainId => {
-        this.chainId = chainId
-        this.emit('chainChanged', chainId)
+        this.providerChainId = chainId
+
+        if (!this.manualChainId) {
+          this.emit('chainChanged', chainId)
+        }
       },
       chainsChanged: chains => {
         this.emit('chainsChanged', chains)
@@ -94,16 +99,20 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
+  get chainId () {
+    return this.manualChainId || this.providerChainId
+  }
+
   async checkConnection (retry) {
     if (this.checkConnectionRunning || this.connected) return
     this.checkConnectionRunning = true
     try {
       this.networkVersion = await this._send('net_version', [], undefined, false)
-      this.chainId = await this._send('eth_chainId', [], undefined, false)
+      this.providerChainId = await this._send('eth_chainId', [], undefined, false)
 
       this.checkConnectionRunning = false
       this.connected = true
-      this.emit('connect', { chainId: this.chainId })
+      this.emit('connect', { chainId: this.providerChainId })
 
       clearTimeout(this.checkConnectionTimer)
 
@@ -160,7 +169,7 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  _send (method, params = [], targetChain = this.chainId, waitForConnection = true) {
+  _send (method, params = [], targetChain, waitForConnection = true) {
     const sendFn = (resolve, reject) => {
       let payload
       if (typeof method === 'object' && method !== null) {
@@ -170,10 +179,10 @@ class EthereumProvider extends EventEmitter {
         payload.id = this.nextId++
       } else {
         payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
-      }
-      
-      if (targetChain && !('chain' in payload)) {
-        payload.chain = targetChain
+
+        if (targetChain && !('chainId' in payload)) {
+          payload.chainId = targetChain
+        }
       }
 
       this.promises[payload.id] = { resolve, reject, method }
@@ -316,21 +325,22 @@ class EthereumProvider extends EventEmitter {
     this.subscriptions.forEach(id => this.emit(id, error)) // Send Error objects to any open subscriptions
     this.subscriptions = [] // Clear subscriptions
 
-    this.chainId = undefined
+    this.manualChainId = undefined
+    this.providerChainId = undefined
     this.networkVersion = undefined
     this.selectedAddress = undefined
   }
 
   request (payload) {
-    return this._send(payload.method, payload.params, payload.chain)
+    return this._send(payload.method, payload.params, payload.chainId)
   }
 
   setChain (chainId) {
     if (typeof chainId === 'number') chainId = '0x' + chainId.toString(16)
 
-    const updateEvents = ['chainChanged', 'networkChanged']
+    this.manualChainId = chainId
 
-    updateEvents.forEach(event => this.eventHandlers[event](chainId))
+    this.emit('chainChanged', chainId)
   }
 }
 
