@@ -339,7 +339,7 @@ class EthereumProvider extends EventEmitter {
 
     this.manualChainId = chainId
 
-    this.emit('chainChanged', chainId)
+    this.emit('chainChanged', this.chainId)
   }
 }
 
