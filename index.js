@@ -1,5 +1,19 @@
 const EventEmitter = require('events')
 
+// returns a chainId if it's found to be inconsistent, otherwise false
+function updatePayloadChain (payload) {
+  if (payload.method === 'eth_sendTransaction') {
+    const tx = payload.params[0] || {}
+    if ('chainId' in tx) {
+      return (parseInt(tx.chainId) !== parseInt(payload.chainId)) && tx.chainId
+    }
+
+    tx.chainId = payload.chainId
+  }
+
+  return false
+}
+
 class EthereumProvider extends EventEmitter {
   constructor (connection) {
     super()
@@ -180,17 +194,21 @@ class EthereumProvider extends EventEmitter {
         payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
       }
 
-      if (targetChain && !('chainId' in payload)) {
-        payload.chainId = targetChain
+      if (!payload.method || typeof payload.method !== 'string') {
+        return reject(new Error('Method is not a valid string.'))
+      }
+
+      if (targetChain) {
+        if (!('chainId' in payload)) payload.chainId = targetChain
+
+        const mismatchedChain = updatePayloadChain(payload)
+        if (mismatchedChain) {
+          return reject(new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`))
+        }
       }
 
       this.promises[payload.id] = { resolve, reject, method }
-      if (!payload.method || typeof payload.method !== 'string') {
-        this.promises[payload.id].reject(new Error('Method is not a valid string.'))
-        delete this.promises[payload.id]
-      } else {
-        this.connection.send(payload)
-      }
+      this.connection.send(payload)
     }
 
     if (this.connected || !waitForConnection) {
