@@ -169,7 +169,7 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  _send (method, params = [], targetChain, waitForConnection = true) {
+  _send (method, params = [], targetChain = this.manualChainId, waitForConnection = true) {
     const sendFn = (resolve, reject) => {
       let payload
       if (typeof method === 'object' && method !== null) {
@@ -179,10 +179,10 @@ class EthereumProvider extends EventEmitter {
         payload.id = this.nextId++
       } else {
         payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
+      }
 
-        if (targetChain && !('chainId' in payload)) {
-          payload.chainId = targetChain
-        }
+      if (targetChain && !('chainId' in payload)) {
+        payload.chainId = targetChain
       }
 
       this.promises[payload.id] = { resolve, reject, method }
