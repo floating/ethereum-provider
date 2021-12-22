@@ -18,5 +18,9 @@
   },
   "dependencies": {
     "events": "3.3.0"
+  },
+  "mocha": {
+    "timeout": 100,
+    "require": "test/hooks.js"
   }
 }

@@ -355,9 +355,13 @@ class EthereumProvider extends EventEmitter {
   setChain (chainId) {
     if (typeof chainId === 'number') chainId = '0x' + chainId.toString(16)
 
+    const chainChanged = (chainId !== this.chainId)
+
     this.manualChainId = chainId
 
-    this.emit('chainChanged', this.chainId)
+    if (chainChanged) {
+      this.emit('chainChanged', this.chainId)
+    }
   }
 }
 
