@@ -1,5 +1,19 @@
 const EventEmitter = require('events')
 
+// returns a chainId if it's found to be inconsistent, otherwise false
+function updatePayloadChain (payload) {
+  if (payload.method === 'eth_sendTransaction') {
+    const tx = payload.params[0] || {}
+    if ('chainId' in tx) {
+      return (parseInt(tx.chainId) !== parseInt(payload.chainId)) && tx.chainId
+    }
+
+    tx.chainId = payload.chainId
+  }
+
+  return false
+}
+
 class EthereumProvider extends EventEmitter {
   constructor (connection) {
     super()
@@ -28,6 +42,7 @@ class EthereumProvider extends EventEmitter {
       this.emit('close')
       this.emit('disconnect')
     })
+
     this.connection.on('payload', payload => {
       const { id, method, error, result } = payload
       if (typeof id !== 'undefined') {
@@ -45,7 +60,7 @@ class EthereumProvider extends EventEmitter {
           delete this.promises[id]
         }
       } else if (method && method.indexOf('_subscription') > -1) { // Emit subscription result
-        // Events: connect, disconnect, chainChanged, accountsChanged, message
+        // Events: connect, disconnect, chainChanged, chainsChanged, accountsChanged, assetsChanged, message
         this.emit(payload.params.subscription, payload.params.result)
         this.emit(method, payload.params) // Older EIP-1193
         this.emit('message', { // Latest EIP-1193
@@ -58,34 +73,65 @@ class EthereumProvider extends EventEmitter {
         this.emit('data', payload) // Backwards Compatibility
       }
     })
-    this.on('newListener', (event, listener) => {
-      if (event === 'chainChanged' && !this.attemptedChainSubscription && this.connected) {
-        this.startChainSubscription()
-      } else if (event === 'accountsChanged' && !this.attemptedAccountsSubscription && this.connected) {
-        this.startAccountsSubscription()
-      } else if (event === 'networkChanged' && !this.attemptedNetworkSubscription && this.connected) {
-        this.startNetworkSubscription()
-        console.warn('The networkChanged event is being deprecated, use chainChainged instead')
+
+    this.on('newListener', event => {
+      if (Object.keys(this.eventHandlers).includes(event)) {
+        if (!this._attemptedSubscription(event) && this.connected) {
+          this.startSubscription(event)
+
+          if (event === 'networkChanged') {
+            console.warn('The networkChanged event is being deprecated, use chainChanged instead')
+          }
+        }
       }
     })
+
+    this.eventHandlers = {
+      networkChanged: netId => {
+        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId
+
+        this.emit('networkChanged', this.networkVersion)
+      },
+      chainChanged: chainId => {
+        this.providerChainId = chainId
+
+        if (!this.manualChainId) {
+          this.emit('chainChanged', chainId)
+        }
+      },
+      chainsChanged: chains => {
+        this.emit('chainsChanged', chains)
+      },
+      accountsChanged: accounts => {
+        this.selectedAddress = accounts[0]
+        this.emit('accountsChanged', accounts)
+      },
+      assetsChanged: assets => {
+        this.emit('assetsChanged', assets)
+      }
+    }
+  }
+
+  get chainId () {
+    return this.manualChainId || this.providerChainId
   }
 
   async checkConnection (retry) {
     if (this.checkConnectionRunning || this.connected) return
     this.checkConnectionRunning = true
     try {
-      this.networkVersion = await this._send('net_version', [], false)
-      this.chainId = await this._send('eth_chainId', [], false)
+      this.networkVersion = await this._send('net_version', [], undefined, false)
+      this.providerChainId = await this._send('eth_chainId', [], undefined, false)
 
       this.checkConnectionRunning = false
       this.connected = true
-      this.emit('connect', { chainId: this.chainId })
+      this.emit('connect', { chainId: this.providerChainId })
 
       clearTimeout(this.checkConnectionTimer)
 
-      if (this.listenerCount('networkChanged') && !this.attemptedNetworkSubscription) this.startNetworkSubscription()
-      if (this.listenerCount('chainChanged') && !this.attemptedChainSubscription) this.startChainSubscription()
-      if (this.listenerCount('accountsChanged') && !this.attemptedAccountsSubscription) this.startAccountsSubscription()
+      Object.keys(this.eventHandlers).forEach(event => {
+        if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
+      })
     } catch (e) {
       if (!retry) setTimeout(() => this.checkConnection(true), 1000)
       this.checkConnectionTimer = setInterval(() => this.checkConnection(true), 4000)
@@ -94,42 +140,25 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  async startNetworkSubscription () {
-    this.attemptedNetworkSubscription = true
-    try {
-      const networkChanged = await this.subscribe('eth_subscribe', 'networkChanged')
-      this.on(networkChanged, netId => {
-        this.networkVersion = netId
-        this.emit('networkChanged', netId)
-      })
-    } catch (e) {
-      console.warn('Unable to subscribe to networkChanged', e)
-    }
+  _attemptedSubscription (event) {
+    return this[`attempted${event}Subscription`]
   }
 
-  async startChainSubscription () {
-    this.attemptedChainSubscription = true
-    try {
-      const chainChanged = await this.subscribe('eth_subscribe', 'chainChanged')
-      this.on(chainChanged, netId => {
-        this.chainId = netId
-        this.emit('chainChanged', netId)
-      })
-    } catch (e) {
-      console.warn('Unable to subscribe to chainChanged', e)
-    }
+  _setSubscriptionAttempted (event) {
+    this[`attempted${event}Subscription`] = true
   }
 
-  async startAccountsSubscription () {
-    this.attemptedAccountsSubscription = true
+  async startSubscription (event) {
+    console.debug(`starting subscription for ${event} events`)
+
+    this._setSubscriptionAttempted(event)
+
     try {
-      const accountsChanged = await this.subscribe('eth_subscribe', 'accountsChanged')
-      this.on(accountsChanged, accounts => {
-        this.selectedAddress = accounts[0]
-        this.emit('accountsChanged', accounts)
-      })
+      const eventId = await this.subscribe('eth_subscribe', event)
+
+      this.on(eventId, this.eventHandlers[event])
     } catch (e) {
-      console.warn('Unable to subscribe to accountsChanged', e)
+      console.warn(`Unable to subscribe to ${event}`, e)
     }
   }
 
@@ -153,7 +182,7 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  _send (method, params = [], waitForConnection = true) {
+  _send (method, params = [], targetChain = this.manualChainId, waitForConnection = true) {
     const sendFn = (resolve, reject) => {
       let payload
       if (typeof method === 'object' && method !== null) {
@@ -165,13 +194,21 @@ class EthereumProvider extends EventEmitter {
         payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
       }
 
-      this.promises[payload.id] = { resolve, reject, method }
       if (!payload.method || typeof payload.method !== 'string') {
-        this.promises[payload.id].reject(new Error('Method is not a valid string.'))
-        delete this.promises[payload.id]
-      } else {
-        this.connection.send(payload)
+        return reject(new Error('Method is not a valid string.'))
       }
+
+      if (targetChain) {
+        if (!('chainId' in payload)) payload.chainId = targetChain
+
+        const mismatchedChain = updatePayloadChain(payload)
+        if (mismatchedChain) {
+          return reject(new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`))
+        }
+      }
+
+      this.promises[payload.id] = { resolve, reject, method }
+      this.connection.send(payload)
     }
 
     if (this.connected || !waitForConnection) {
@@ -305,13 +342,26 @@ class EthereumProvider extends EventEmitter {
     this.subscriptions.forEach(id => this.emit(id, error)) // Send Error objects to any open subscriptions
     this.subscriptions = [] // Clear subscriptions
 
-    this.chainId = undefined
+    this.manualChainId = undefined
+    this.providerChainId = undefined
     this.networkVersion = undefined
     this.selectedAddress = undefined
   }
 
   request (payload) {
-    return this._send(payload.method, payload.params)
+    return this._send(payload.method, payload.params, payload.chainId)
+  }
+
+  setChain (chainId) {
+    if (typeof chainId === 'number') chainId = '0x' + chainId.toString(16)
+
+    const chainChanged = (chainId !== this.chainId)
+
+    this.manualChainId = chainId
+
+    if (chainChanged) {
+      this.emit('chainChanged', this.chainId)
+    }
   }
 }
 
