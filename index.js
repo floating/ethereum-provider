@@ -128,7 +128,6 @@ class EthereumProvider extends EventEmitter {
       this.networkVersion = await this._send('net_version', [], undefined, false)
       this.providerChainId = await this._send('eth_chainId', [], undefined, false)
 
-      this.checkConnectionRunning = false
       this.connected = true
 
       this.emit('connect', { chainId: this.providerChainId })
