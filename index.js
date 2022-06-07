@@ -36,7 +36,7 @@ class EthereumProvider extends EventEmitter {
     this.promises = {}
     this.subscriptions = []
     this.connection = connection
-    this.connection.on('connect', () => this.checkConnection())
+    this.connection.on('connect', () => this.checkConnection(1000))
     this.connection.on('close', () => {
       this.connected = false
       this.emit('close')
@@ -116,27 +116,31 @@ class EthereumProvider extends EventEmitter {
     return this.manualChainId || this.providerChainId
   }
 
-  async checkConnection (retry) {
+  async checkConnection (retryTimeout = 4000) {
     if (this.checkConnectionRunning || this.connected) return
+
+    clearTimeout(this.checkConnectionTimer)
+
+    this.checkConnectionTimer = null
     this.checkConnectionRunning = true
+
     try {
       this.networkVersion = await this._send('net_version', [], undefined, false)
       this.providerChainId = await this._send('eth_chainId', [], undefined, false)
 
-      this.checkConnectionRunning = false
       this.connected = true
-      this.emit('connect', { chainId: this.providerChainId })
 
-      clearTimeout(this.checkConnectionTimer)
+      this.emit('connect', { chainId: this.providerChainId })
 
       Object.keys(this.eventHandlers).forEach(event => {
         if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
       })
     } catch (e) {
-      if (!retry) setTimeout(() => this.checkConnection(true), 1000)
-      this.checkConnectionTimer = setInterval(() => this.checkConnection(true), 4000)
-      this.checkConnectionRunning = false
+      this.checkConnectionTimer = setTimeout(() => this.checkConnection(), retryTimeout)
+
       this.connected = false
+    } finally {
+      this.checkConnectionRunning = false
     }
   }
 
