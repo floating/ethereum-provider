@@ -36,6 +36,13 @@ class EthereumProvider extends EventEmitter {
     this.promises = {}
     this.subscriptions = []
     this.connection = connection
+
+    this.on('connect', () => {
+      Object.keys(this.eventHandlers).forEach(event => {
+        if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
+      })
+    })
+
     this.connection.on('connect', () => this.checkConnection(1000))
     this.connection.on('close', () => {
       this.connected = false
@@ -129,18 +136,16 @@ class EthereumProvider extends EventEmitter {
       this.providerChainId = await this._send('eth_chainId', [], undefined, false)
 
       this.connected = true
-
-      this.emit('connect', { chainId: this.providerChainId })
-
-      Object.keys(this.eventHandlers).forEach(event => {
-        if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
-      })
     } catch (e) {
       this.checkConnectionTimer = setTimeout(() => this.checkConnection(), retryTimeout)
 
       this.connected = false
     } finally {
       this.checkConnectionRunning = false
+
+      if (this.connected) {
+        this.emit('connect', { chainId: this.providerChainId })
+      }
     }
   }
 
