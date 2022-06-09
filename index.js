@@ -22,8 +22,11 @@ class EthereumProvider extends EventEmitter {
     this._send = this._send.bind(this)
     this.send = this.send.bind(this)
     this._sendBatch = this._sendBatch.bind(this)
+
     this.subscribe = this.subscribe.bind(this)
     this.unsubscribe = this.unsubscribe.bind(this)
+    this.resumeSubscriptions = this._resumeSubscriptions.bind(this)
+
     this.sendAsync = this.sendAsync.bind(this)
     this.sendAsyncBatch = this.sendAsyncBatch.bind(this)
     this.isConnected = this.isConnected.bind(this)
@@ -37,11 +40,7 @@ class EthereumProvider extends EventEmitter {
     this.subscriptions = []
     this.connection = connection
 
-    this.on('connect', () => {
-      Object.keys(this.eventHandlers).forEach(event => {
-        if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
-      })
-    })
+    this.on('connect', this.resumeSubscriptions)
 
     this.connection.on('connect', () => this.checkConnection(1000))
     this.connection.on('close', () => {
@@ -169,6 +168,12 @@ class EthereumProvider extends EventEmitter {
     } catch (e) {
       console.warn(`Unable to subscribe to ${event}`, e)
     }
+  }
+
+  _resumeSubscriptions () {
+    Object.keys(this.eventHandlers).forEach(event => {
+      if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
+    })
   }
 
   enable () {
@@ -346,7 +351,9 @@ class EthereumProvider extends EventEmitter {
 
   close () {
     if (this.connection && this.connection.close) this.connection.close()
+    this.off('connect', this.resumeSubscriptions)
     this.connected = false
+
     const error = new Error('Provider closed, subscription lost, please subscribe again.')
     this.subscriptions.forEach(id => this.emit(id, error)) // Send Error objects to any open subscriptions
     this.subscriptions = [] // Clear subscriptions
