@@ -1,6 +1,7 @@
 {
   "name": "ethereum-provider",
-  "version": "0.6.1",
+  "version": "0.7.0",
+  "type": "module",
   "description": "A standalone EthereumProvider class, just supply the connection",
   "main": "index.js",
   "scripts": {
@@ -17,7 +18,10 @@
     "standard": "17.0.0"
   },
   "dependencies": {
-    "events": "3.3.0"
+    "@tsconfig/node16": "^1.0.3",
+    "@types/node": "^18.7.14",
+    "events": "3.3.0",
+    "typescript": "^4.8.2"
   },
   "mocha": {
     "timeout": 100,
