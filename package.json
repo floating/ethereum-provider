@@ -1,9 +1,12 @@
 {
   "name": "ethereum-provider",
-  "version": "0.7.0",
-  "type": "module",
+  "version": "0.8.0",
   "description": "A standalone EthereumProvider class, just supply the connection",
-  "main": "index.js",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build/"
+  ],
   "scripts": {
     "test": "standard --fix && mocha"
   },
