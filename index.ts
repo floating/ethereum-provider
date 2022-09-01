@@ -1,45 +1,6 @@
 import EventEmitter from 'events'
-
-type Payload = {
-  method: string
-  params: any[]
-  jsonrpc: '2.0'
-  id: number
-  chainId?: string
-}
-
-type Response = {
-  id: number,
-  jsonrpc: '2.0',
-  result: any
-}
-
-type EventHandler = (eventPayload: any) => void
-
-type PendingPromise = {
-  resolve: (result: any) => void
-  reject: (err: Error) => void
-  method: string
-}
-
-interface Connection extends EventEmitter {
-  send: (payload: Payload) => Promise<void>
-  close: () => void
-}
-
-// returns a chainId if it's found to be inconsistent, otherwise false
-function updatePayloadChain (payload: Payload) {
-  if (payload.method === 'ethdoSendTransaction') {
-    const tx = payload.params[0] || {}
-    if ('chainId' in tx) {
-      return (parseInt(tx.chainId) !== parseInt(payload.chainId || '')) && tx.chainId
-    }
-
-    tx.chainId = payload.chainId
-  }
-
-  return false
-}
+import { isChainMismatch, Payload, updatePayloadChain } from './payload'
+import type { Callback, Connection, EventHandler, PendingPromise, Response } from './types'
 
 class EthereumProvider extends EventEmitter {
   private readonly connection: Connection
@@ -257,9 +218,13 @@ class EthereumProvider extends EventEmitter {
       if (targetChain) {
         if (!('chainId' in payload)) payload.chainId = targetChain
 
-        const mismatchedChain = updatePayloadChain(payload)
-        if (mismatchedChain) {
-          return reject(new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`))
+        if (payload.method === 'eth_sendTransaction') {
+          const mismatchedChain = isChainMismatch(payload)
+          if (mismatchedChain) {
+            return reject(new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`))
+          }
+
+          payload = updatePayloadChain(payload)
         }
       }
 
@@ -286,12 +251,13 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  send (methodOrPayload: string | Payload, callbackOrArgs: () => void | any[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
+  async send (methodOrPayload: string | Payload, callbackOrArgs: Callback<Response> | any[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
     if (
       typeof methodOrPayload === 'string' &&
       (!callbackOrArgs || Array.isArray(callbackOrArgs))
     ) {
-      return this.doSend(methodOrPayload, callbackOrArgs)
+      const params = callbackOrArgs as any[]
+      return this.doSend(methodOrPayload, params)
     }
 
     if (
@@ -300,7 +266,8 @@ class EthereumProvider extends EventEmitter {
       typeof callbackOrArgs === 'function'
     ) {
       // a callback was passed to send(), forward everything to sendAsync()
-      return this.sendAsync(methodOrPayload, callbackOrArgs)
+      const cb = callbackOrArgs as Callback<Response>
+      return this.sendAsync(methodOrPayload, cb)
     }
 
     return this.request(methodOrPayload as Payload)
@@ -313,7 +280,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async subscribe (type: string, method: string, params = []) {
-    const id = await (<Promise<string>>this.doSend(type, [method, ...params]))
+    const id = <string>(await this.doSend(type, [method, ...params]))
 
     this.subscriptions.push(id)
 
@@ -321,7 +288,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async unsubscribe (type: string, id: string) {
-    const success = await <Promise<boolean>>this.doSend(type, [id])
+    const success = <boolean>(await this.doSend(type, [id]))
 
     if (success) {
       this.subscriptions = this.subscriptions.filter(_id => _id !== id) // Remove subscription
@@ -330,7 +297,7 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  sendAsync (payload: Payload, cb: (err: Error | null, result?: Response | Response[]) => void) { // Backwards Compatibility
+  async sendAsync (payload: Payload, cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
     if (!cb || typeof cb !== 'function') return new Error('Invalid or undefined callback provided to sendAsync')
 
     if (!payload) return cb(new Error('Invalid Payload'))
@@ -339,13 +306,17 @@ class EthereumProvider extends EventEmitter {
     payload.jsonrpc = '2.0'
 
     if (Array.isArray(payload)) {
-      return this.sendAsyncBatch(payload, cb)
+      const callback = cb as Callback<Response[]>
+      return this.sendAsyncBatch(payload, callback)
     } else {
-      return this.doSend(payload.method, payload.params).then(result => {
-        cb(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
-      }).catch(err => {
-        cb(err)
-      })
+      const callback = cb as Callback<Response>
+
+      try {
+        const result = <any>(await this.doSend(payload.method, payload.params))
+        callback(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
+      } catch (e: any) {
+        callback(e as Error)
+      }
     }
   }
 
@@ -382,7 +353,7 @@ class EthereumProvider extends EventEmitter {
     this.selectedAddress = ''
   }
 
-  request (payload: Payload) {
+  async request (payload: Payload) {
     return this.doSend(payload.method, payload.params, payload.chainId)
   }
 

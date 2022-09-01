@@ -6,7 +6,8 @@
     "outDir": "build",
 
     "strictNullChecks": true,
-    "strictPropertyInitialization": true
+    "strictPropertyInitialization": true,
+    "declaration": true
   },
   "include": ["**/*.ts"],
 }
