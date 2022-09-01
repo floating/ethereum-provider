@@ -1,5 +1,3 @@
-/* globals it describe beforeEach */
-
 import assert, { fail } from 'assert'
 import { EventEmitter } from 'events'
 

@@ -1,4 +1,5 @@
 // const consoleLog = console.log
+
 const consoleDebug = console.debug
 const consoleError = console.error
 

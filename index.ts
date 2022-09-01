@@ -1,5 +1,5 @@
 import EventEmitter from 'events'
-import { isChainMismatch, Payload, updatePayloadChain } from './payload'
+import { create as createPayload, Payload } from './payload'
 import type { Callback, Connection, EventHandler, PendingPromise, Response } from './types'
 
 class EthereumProvider extends EventEmitter {
@@ -7,8 +7,8 @@ class EthereumProvider extends EventEmitter {
 
   private readonly eventHandlers: Record<string, EventHandler>
   private readonly promises: Record<string, PendingPromise> = {}
+  private readonly attemptedSubscriptions: Set<string> = new Set()
   private subscriptions: string[] = []
-  private readonly attemptedSubscriptions: Record<string, boolean> = {}
 
   private networkVersion?: number
   private manualChainId?: string
@@ -152,11 +152,11 @@ class EthereumProvider extends EventEmitter {
   }
 
   private attemptedSubscription (event: string) {
-    return !!this.attemptedSubscriptions[event]
+    return this.attemptedSubscriptions.has(event)
   }
 
   private setSubscriptionAttempted (event: string) {
-    this.attemptedSubscriptions[event] = true
+    this.attemptedSubscriptions.add(event)
   }
 
   async startSubscription (event: string) {
@@ -199,37 +199,24 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  private doSend <T> (method: string, params: any[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
+  private doSend <T> (rawPayload: string | Payload, rawParams: readonly any[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
     const sendFn = (resolve: (result: any) => void, reject: (err: Error) => void) => {
-      let payload: Payload
-      if (typeof method === 'object' && method !== null) {
-        payload = method
-        payload.params = payload.params || []
-        payload.jsonrpc = '2.0'
-        payload.id = this.nextId++
-      } else {
-        payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
-      }
+      const method = (typeof rawPayload === 'object') ? rawPayload.method : rawPayload
+      const params = (typeof rawPayload === 'object') ? rawPayload.params : rawParams
+      const chainTarget = ((typeof rawPayload === 'object') && rawPayload.chainId) || targetChain
 
-      if (!payload.method || typeof payload.method !== 'string') {
+      if (!method) {
         return reject(new Error('Method is not a valid string.'))
       }
 
-      if (targetChain) {
-        if (!('chainId' in payload)) payload.chainId = targetChain
+      try {
+        const payload = createPayload(method, params, this.nextId++, chainTarget)
 
-        if (payload.method === 'eth_sendTransaction') {
-          const mismatchedChain = isChainMismatch(payload)
-          if (mismatchedChain) {
-            return reject(new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`))
-          }
-
-          payload = updatePayloadChain(payload)
-        }
+        this.promises[payload.id] = { resolve, reject, method: payload.method }
+        this.connection.send(payload)
+      } catch (e) {
+        reject(e as Error)
       }
-
-      this.promises[payload.id] = { resolve, reject, method }
-      this.connection.send(payload)
     }
 
     if (this.connected || !waitForConnection) {
@@ -297,14 +284,15 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  async sendAsync (payload: Payload, cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
+  async sendAsync (rawPayload: Payload, cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
     if (!cb || typeof cb !== 'function') return new Error('Invalid or undefined callback provided to sendAsync')
 
-    if (!payload) return cb(new Error('Invalid Payload'))
+    if (!rawPayload) return cb(new Error('Invalid Payload'))
+
+    const payload: Payload = { ...rawPayload, jsonrpc: '2.0' }
+
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
-    payload.jsonrpc = '2.0'
-
     if (Array.isArray(payload)) {
       const callback = cb as Callback<Response[]>
       return this.sendAsyncBatch(payload, callback)
