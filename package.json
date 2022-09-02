@@ -8,6 +8,7 @@
     "build/"
   ],
   "scripts": {
+    "build": "tsc",
     "test": "standard --fix && mocha --require @babel/register"
   },
   "author": {
