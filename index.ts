@@ -97,12 +97,12 @@ class EthereumProvider extends EventEmitter {
 
     this.eventHandlers = {
       networkChanged: netId => {
-        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId
+        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId as number
 
         this.emit('networkChanged', this.networkVersion)
       },
       chainChanged: chainId => {
-        this.providerChainId = chainId
+        this.providerChainId = chainId as string
 
         if (!this.manualChainId) {
           this.emit('chainChanged', chainId)
@@ -111,8 +111,8 @@ class EthereumProvider extends EventEmitter {
       chainsChanged: chains => {
         this.emit('chainsChanged', chains)
       },
-      accountsChanged: accounts => {
-        this.selectedAddress = accounts[0]
+      accountsChanged: (accounts) => {
+        this.selectedAddress = (accounts as string[])[0]
         this.emit('accountsChanged', accounts)
       },
       assetsChanged: assets => {
@@ -180,7 +180,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async enable () {
-    const accounts = await (<Promise<string[]>>this.doSend('eth_accounts'))
+    const accounts = await this.doSend<string[]>('eth_accounts')
 
     if (accounts.length > 0) {
       this.accounts = accounts
@@ -191,16 +191,15 @@ class EthereumProvider extends EventEmitter {
 
       return accounts
     } else {
-      const err = new Error('User Denied Full Provider')
+      const err = new Error('User Denied Full Provider') as NodeJS.ErrnoException
 
-      // @ts-ignore
-      err.code = 4001
+      err.code = '4001'
       throw err
     }
   }
 
-  private doSend <T> (rawPayload: string | Payload, rawParams: readonly any[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
-    const sendFn = (resolve: (result: any) => void, reject: (err: Error) => void) => {
+  private doSend <T> (rawPayload: string | Payload, rawParams: readonly unknown[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
+    const sendFn = (resolve: (result: T) => void, reject: (err: Error) => void) => {
       const method = (typeof rawPayload === 'object') ? rawPayload.method : rawPayload
       const params = (typeof rawPayload === 'object') ? rawPayload.params : rawParams
       const chainTarget = ((typeof rawPayload === 'object') && rawPayload.chainId) || targetChain
@@ -212,7 +211,11 @@ class EthereumProvider extends EventEmitter {
       try {
         const payload = createPayload(method, params, this.nextId++, chainTarget)
 
-        this.promises[payload.id] = { resolve, reject, method: payload.method }
+        this.promises[payload.id] = { 
+          resolve: (result) => resolve(result as T), 
+          reject, 
+          method: payload.method 
+        }
         this.connection.send(payload)
       } catch (e) {
         reject(e as Error)
@@ -238,12 +241,12 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  async send (methodOrPayload: string | Payload, callbackOrArgs: Callback<Response> | any[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
+  async send (methodOrPayload: string | Payload, callbackOrArgs: Callback<Response> | unknown[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
     if (
       typeof methodOrPayload === 'string' &&
       (!callbackOrArgs || Array.isArray(callbackOrArgs))
     ) {
-      const params = callbackOrArgs as any[]
+      const params = callbackOrArgs
       return this.doSend(methodOrPayload, params)
     }
 
@@ -260,14 +263,14 @@ class EthereumProvider extends EventEmitter {
     return this.request(methodOrPayload as Payload)
   }
 
-  private sendBatch (requests: Payload[]): Promise<any[]> {
+  private sendBatch (requests: Payload[]): Promise<unknown[]> {
     return Promise.all(requests.map(payload => {
       return this.doSend(payload.method, payload.params)
     }))
   }
 
   async subscribe (type: string, method: string, params = []) {
-    const id = <string>(await this.doSend(type, [method, ...params]))
+    const id = await this.doSend<string>(type, [method, ...params])
 
     this.subscriptions.push(id)
 
@@ -275,7 +278,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async unsubscribe (type: string, id: string) {
-    const success = <boolean>(await this.doSend(type, [id]))
+    const success = await this.doSend<boolean>(type, [id])
 
     if (success) {
       this.subscriptions = this.subscriptions.filter(_id => _id !== id) // Remove subscription
@@ -300,9 +303,9 @@ class EthereumProvider extends EventEmitter {
       const callback = cb as Callback<Response>
 
       try {
-        const result = <any>(await this.doSend(payload.method, payload.params))
+        const result = await this.doSend(payload.method, payload.params)
         callback(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
-      } catch (e: any) {
+      } catch (e: unknown) {
         callback(e as Error)
       }
     }
@@ -317,7 +320,7 @@ class EthereumProvider extends EventEmitter {
       })
       
       cb(null, result)
-    } catch (e: any) {
+    } catch (e: unknown) {
       cb(e as Error)
     }
   }
