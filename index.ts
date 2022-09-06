@@ -14,11 +14,11 @@ class EthereumProvider extends EventEmitter {
   private manualChainId?: string
   private providerChainId?: string
 
-  private connected = false
   private checkConnectionRunning = false
   private checkConnectionTimer?: NodeJS.Timer
   private nextId = 1
 
+  connected = false
   accounts: string[] = []
   selectedAddress = ''
   coinbase = ''
@@ -305,7 +305,7 @@ class EthereumProvider extends EventEmitter {
       try {
         const result = await this.doSend(payload.method, payload.params)
         callback(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
-      } catch (e: unknown) {
+      } catch (e) {
         callback(e as Error)
       }
     }
@@ -320,7 +320,7 @@ class EthereumProvider extends EventEmitter {
       })
       
       cb(null, result)
-    } catch (e: unknown) {
+    } catch (e) {
       cb(e as Error)
     }
   }

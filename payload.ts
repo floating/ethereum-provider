@@ -1,8 +1,12 @@
 export type Payload = {
   readonly method: string
-  readonly params: readonly any[]
+  readonly params: readonly unknown[]
   readonly jsonrpc: '2.0'
   readonly id: number
+  chainId?: string
+}
+
+type Transaction = {
   chainId?: string
 }
 
@@ -30,13 +34,14 @@ export function create (method: string, params: readonly any[] = [], id: number,
 function isChainMismatch (payload: Payload) {
   if (payload.method !== 'eth_sendTransaction') return false
 
-  const tx = payload.params[0] || {}
+  const tx: Transaction = payload.params[0] || {}
+  const chainId = tx.chainId as string
 
-  return ('chainId' in tx) && parseInt(tx.chainId) !== parseInt(payload.chainId || tx.chainId)
+  return ('chainId' in tx) && parseInt(chainId) !== parseInt(payload.chainId || chainId)
 }
 
 function updatePayloadChain (payload: Payload) {
-  const tx = payload.params[0] || {}
+  const tx: Transaction = payload.params[0] || {}
 
   return { ...payload, params: [{ ...tx, chainId: tx.chainId || payload.chainId }, ...payload.params.slice(1)]}
 }
