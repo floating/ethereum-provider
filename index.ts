@@ -186,7 +186,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async enable () {
-    const accounts = await this.doSend<string[]>('eth_accounts')
+    const accounts: string[] = await this.doSend('eth_accounts')
 
     if (accounts.length > 0) {
       this.accounts = accounts
@@ -198,8 +198,8 @@ class EthereumProvider extends EventEmitter {
       return accounts
     } else {
       const err = new Error('User Denied Full Provider') as NodeJS.ErrnoException
-
       err.code = '4001'
+
       throw err
     }
   }
@@ -277,7 +277,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async subscribe (type: string, method: string, params = []) {
-    const id = await this.doSend<string>(type, [method, ...params])
+    const id: string = await this.doSend(type, [method, ...params])
 
     this.subscriptions.push(id)
 
@@ -285,7 +285,7 @@ class EthereumProvider extends EventEmitter {
   }
 
   async unsubscribe (type: string, id: string) {
-    const success = await this.doSend<boolean>(type, [id])
+    const success: boolean = await this.doSend<boolean>(type, [id])
 
     if (success) {
       this.subscriptions = this.subscriptions.filter(_id => _id !== id) // Remove subscription
