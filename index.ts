@@ -1,6 +1,12 @@
 import EventEmitter from 'events'
 import { create as createPayload, Payload } from './payload'
+
 import type { Callback, Connection, EventHandler, PendingPromise, Response } from './types'
+
+export declare namespace RPC {
+  export { Payload }
+  export { Response }
+}
 
 class EthereumProvider extends EventEmitter {
   private readonly connection: Connection
@@ -216,6 +222,7 @@ class EthereumProvider extends EventEmitter {
           reject, 
           method: payload.method 
         }
+
         this.connection.send(payload)
       } catch (e) {
         reject(e as Error)
@@ -344,8 +351,8 @@ class EthereumProvider extends EventEmitter {
     this.selectedAddress = ''
   }
 
-  async request (payload: Payload) {
-    return this.doSend(payload.method, payload.params, payload.chainId)
+  async request <T> (payload: Payload): Promise<T> {
+    return this.doSend<T>(payload.method, payload.params, payload.chainId)
   }
 
   setChain (chainId: string | number) {
