@@ -1,43 +1,52 @@
-const EventEmitter = require('events')
+import EventEmitter from 'events'
+import { create as createPayload, Payload } from './payload'
 
-// returns a chainId if it's found to be inconsistent, otherwise false
-function updatePayloadChain (payload) {
-  if (payload.method === 'eth_sendTransaction') {
-    const tx = payload.params[0] || {}
-    if ('chainId' in tx) {
-      return (parseInt(tx.chainId) !== parseInt(payload.chainId)) && tx.chainId
-    }
+import type { Callback, Connection, EventHandler, PendingPromise, Response } from './types'
 
-    tx.chainId = payload.chainId
-  }
-
-  return false
+export declare namespace RPC {
+  export { Payload }
+  export { Response }
 }
 
 class EthereumProvider extends EventEmitter {
-  constructor (connection) {
+  private readonly connection: Connection
+
+  private readonly eventHandlers: Record<string, EventHandler>
+  private readonly promises: Record<string, PendingPromise> = {}
+  private readonly attemptedSubscriptions: Set<string> = new Set()
+  private subscriptions: string[] = []
+
+  private networkVersion?: number
+  private manualChainId?: string
+  private providerChainId?: string
+
+  private checkConnectionRunning = false
+  private checkConnectionTimer?: NodeJS.Timer
+  private nextId = 1
+
+  connected = false
+  accounts: string[] = []
+  selectedAddress = ''
+  coinbase = ''
+
+  constructor (connection: Connection) {
     super()
 
     this.enable = this.enable.bind(this)
-    this._send = this._send.bind(this)
+    this.doSend = this.doSend.bind(this)
     this.send = this.send.bind(this)
-    this._sendBatch = this._sendBatch.bind(this)
+    this.sendBatch = this.sendBatch.bind(this)
 
     this.subscribe = this.subscribe.bind(this)
     this.unsubscribe = this.unsubscribe.bind(this)
-    this.resumeSubscriptions = this._resumeSubscriptions.bind(this)
+    this.resumeSubscriptions = this.resumeSubscriptions.bind(this)
 
     this.sendAsync = this.sendAsync.bind(this)
     this.sendAsyncBatch = this.sendAsyncBatch.bind(this)
     this.isConnected = this.isConnected.bind(this)
     this.close = this.close.bind(this)
     this.request = this.request.bind(this)
-    this.connected = false
 
-    this.nextId = 1
-
-    this.promises = {}
-    this.subscriptions = []
     this.connection = connection
 
     this.on('connect', this.resumeSubscriptions)
@@ -82,7 +91,7 @@ class EthereumProvider extends EventEmitter {
 
     this.on('newListener', event => {
       if (Object.keys(this.eventHandlers).includes(event)) {
-        if (!this._attemptedSubscription(event) && this.connected) {
+        if (!this.attemptedSubscription(event) && this.connected) {
           this.startSubscription(event)
 
           if (event === 'networkChanged') {
@@ -94,12 +103,12 @@ class EthereumProvider extends EventEmitter {
 
     this.eventHandlers = {
       networkChanged: netId => {
-        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId
+        this.networkVersion = (typeof netId === 'string') ? parseInt(netId) : netId as number
 
         this.emit('networkChanged', this.networkVersion)
       },
       chainChanged: chainId => {
-        this.providerChainId = chainId
+        this.providerChainId = chainId as string
 
         if (!this.manualChainId) {
           this.emit('chainChanged', chainId)
@@ -108,8 +117,8 @@ class EthereumProvider extends EventEmitter {
       chainsChanged: chains => {
         this.emit('chainsChanged', chains)
       },
-      accountsChanged: accounts => {
-        this.selectedAddress = accounts[0]
+      accountsChanged: (accounts) => {
+        this.selectedAddress = (accounts as string[])[0]
         this.emit('accountsChanged', accounts)
       },
       assetsChanged: assets => {
@@ -127,12 +136,12 @@ class EthereumProvider extends EventEmitter {
 
     clearTimeout(this.checkConnectionTimer)
 
-    this.checkConnectionTimer = null
+    this.checkConnectionTimer = undefined
     this.checkConnectionRunning = true
 
     try {
-      this.networkVersion = await this._send('net_version', [], undefined, false)
-      this.providerChainId = await this._send('eth_chainId', [], undefined, false)
+      this.networkVersion = await this.doSend('net_version', [], undefined, false)
+      this.providerChainId = await this.doSend('eth_chainId', [], undefined, false)
 
       this.connected = true
     } catch (e) {
@@ -148,21 +157,21 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  _attemptedSubscription (event) {
-    return this[`attempted${event}Subscription`]
+  private attemptedSubscription (event: string) {
+    return this.attemptedSubscriptions.has(event)
   }
 
-  _setSubscriptionAttempted (event) {
-    this[`attempted${event}Subscription`] = true
+  private setSubscriptionAttempted (event: string) {
+    this.attemptedSubscriptions.add(event)
   }
 
-  async startSubscription (event) {
+  async startSubscription (event: string) {
     console.debug(`starting subscription for ${event} events`)
 
-    this._setSubscriptionAttempted(event)
+    this.setSubscriptionAttempted(event)
 
     try {
-      const eventId = await this.subscribe('eth_subscribe', event)
+      const eventId = await (this.subscribe('eth_subscribe', event)) as string
 
       this.on(eventId, this.eventHandlers[event])
     } catch (e) {
@@ -170,59 +179,54 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  _resumeSubscriptions () {
+  private resumeSubscriptions () {
     Object.keys(this.eventHandlers).forEach(event => {
-      if (this.listenerCount(event) && !this._attemptedSubscription(event)) this.startSubscription(event)
+      if (this.listenerCount(event) && !this.attemptedSubscription(event)) this.startSubscription(event)
     })
   }
 
-  enable () {
-    return new Promise((resolve, reject) => {
-      this._send('eth_accounts').then(accounts => {
-        if (accounts.length > 0) {
-          this.accounts = accounts
-          this.selectedAddress = accounts[0]
-          this.coinbase = accounts[0]
+  async enable () {
+    const accounts: string[] = await this.doSend('eth_accounts')
 
-          this.emit('enable')
+    if (accounts.length > 0) {
+      this.accounts = accounts
+      this.selectedAddress = accounts[0]
+      this.coinbase = accounts[0]
 
-          resolve(accounts)
-        } else {
-          const err = new Error('User Denied Full Provider')
-          err.code = 4001
-          reject(err)
-        }
-      }).catch(reject)
-    })
+      this.emit('enable')
+
+      return accounts
+    } else {
+      const err = new Error('User Denied Full Provider') as NodeJS.ErrnoException
+      err.code = '4001'
+
+      throw err
+    }
   }
 
-  _send (method, params = [], targetChain = this.manualChainId, waitForConnection = true) {
-    const sendFn = (resolve, reject) => {
-      let payload
-      if (typeof method === 'object' && method !== null) {
-        payload = method
-        payload.params = payload.params || []
-        payload.jsonrpc = '2.0'
-        payload.id = this.nextId++
-      } else {
-        payload = { jsonrpc: '2.0', id: this.nextId++, method, params }
-      }
+  private doSend <T> (rawPayload: string | Payload, rawParams: readonly unknown[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
+    const sendFn = (resolve: (result: T) => void, reject: (err: Error) => void) => {
+      const method = (typeof rawPayload === 'object') ? rawPayload.method : rawPayload
+      const params = (typeof rawPayload === 'object') ? rawPayload.params : rawParams
+      const chainTarget = ((typeof rawPayload === 'object') && rawPayload.chainId) || targetChain
 
-      if (!payload.method || typeof payload.method !== 'string') {
+      if (!method) {
         return reject(new Error('Method is not a valid string.'))
       }
 
-      if (targetChain) {
-        if (!('chainId' in payload)) payload.chainId = targetChain
+      try {
+        const payload = createPayload(method, params, this.nextId++, chainTarget)
 
-        const mismatchedChain = updatePayloadChain(payload)
-        if (mismatchedChain) {
-          return reject(new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`))
+        this.promises[payload.id] = { 
+          resolve: (result) => resolve(result as T), 
+          reject, 
+          method: payload.method 
         }
-      }
 
-      this.promises[payload.id] = { resolve, reject, method }
-      this.connection.send(payload)
+        this.connection.send(payload)
+      } catch (e) {
+        reject(e as Error)
+      }
     }
 
     if (this.connected || !waitForConnection) {
@@ -244,12 +248,13 @@ class EthereumProvider extends EventEmitter {
     })
   }
 
-  send (methodOrPayload, callbackOrArgs) { // Send can be clobbered, proxy sendPromise for backwards compatibility
+  async send (methodOrPayload: string | Payload, callbackOrArgs: Callback<Response> | unknown[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
     if (
       typeof methodOrPayload === 'string' &&
       (!callbackOrArgs || Array.isArray(callbackOrArgs))
     ) {
-      return this._send(methodOrPayload, callbackOrArgs)
+      const params = callbackOrArgs
+      return this.doSend(methodOrPayload, params)
     }
 
     if (
@@ -258,92 +263,74 @@ class EthereumProvider extends EventEmitter {
       typeof callbackOrArgs === 'function'
     ) {
       // a callback was passed to send(), forward everything to sendAsync()
-      return this.sendAsync(methodOrPayload, callbackOrArgs)
+      const cb = callbackOrArgs as Callback<Response>
+      return this.sendAsync(methodOrPayload, cb)
     }
 
-    return this.request(methodOrPayload)
+    return this.request(methodOrPayload as Payload)
   }
 
-  _sendBatch (requests) {
-    return Promise.all(requests.map(payload => this._send(payload.method, payload.params)))
+  private sendBatch (requests: Payload[]): Promise<unknown[]> {
+    return Promise.all(requests.map(payload => {
+      return this.doSend(payload.method, payload.params)
+    }))
   }
 
-  subscribe (type, method, params = []) {
-    return this._send(type, [method, ...params]).then(id => {
-      this.subscriptions.push(id)
-      return id
-    })
+  async subscribe (type: string, method: string, params = []) {
+    const id: string = await this.doSend(type, [method, ...params])
+
+    this.subscriptions.push(id)
+
+    return id
   }
 
-  unsubscribe (type, id) {
-    return this._send(type, [id]).then(success => {
-      if (success) {
-        this.subscriptions = this.subscriptions.filter(_id => _id !== id) // Remove subscription
-        this.removeAllListeners(id) // Remove listeners
-        return success
-      }
-    })
+  async unsubscribe (type: string, id: string) {
+    const success: boolean = await this.doSend<boolean>(type, [id])
+
+    if (success) {
+      this.subscriptions = this.subscriptions.filter(_id => _id !== id) // Remove subscription
+      this.removeAllListeners(id) // Remove listeners
+      return success
+    }
   }
 
-  sendAsync (payload, cb) { // Backwards Compatibility
-    if (!cb || typeof cb !== 'function') return cb(new Error('Invalid or undefined callback provided to sendAsync'))
-    if (!payload) return cb(new Error('Invalid Payload'))
+  async sendAsync (rawPayload: Payload, cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
+    if (!cb || typeof cb !== 'function') return new Error('Invalid or undefined callback provided to sendAsync')
+
+    if (!rawPayload) return cb(new Error('Invalid Payload'))
+
+    const payload: Payload = { ...rawPayload, jsonrpc: '2.0' }
+
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
-    payload.jsonrpc = '2.0'
-
     if (Array.isArray(payload)) {
-      return this.sendAsyncBatch(payload, cb)
+      const callback = cb as Callback<Response[]>
+      return this.sendAsyncBatch(payload, callback)
     } else {
-      return this._send(payload.method, payload.params).then(result => {
-        cb(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
-      }).catch(err => {
-        cb(err)
-      })
+      const callback = cb as Callback<Response>
+
+      try {
+        const result = await this.doSend(payload.method, payload.params)
+        callback(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
+      } catch (e) {
+        callback(e as Error)
+      }
     }
   }
 
-  sendAsyncBatch (payload, cb) {
-    return this._sendBatch(payload).then((results) => {
+  private async sendAsyncBatch (payloads: Payload[], cb: (err: Error | null, result?: Response[]) => void) {
+    try {
+      const results = await this.sendBatch(payloads)
+
       const result = results.map((entry, index) => {
-        return { id: payload[index].id, jsonrpc: payload[index].jsonrpc, result: entry }
+        return { id: payloads[index].id, jsonrpc: payloads[index].jsonrpc, result: entry }
       })
+      
       cb(null, result)
-    }).catch(err => {
-      cb(err)
-    })
+    } catch (e) {
+      cb(e as Error)
+    }
   }
-
-  // _sendSync (payload) {
-  //   let result
-
-  //   switch (payload.method) {
-  //     case 'eth_accounts':
-  //       result = this.selectedAddress ? [this.selectedAddress] : []
-  //       break
-
-  //     case 'eth_coinbase':
-  //       result = this.selectedAddress || null
-  //       break
-
-  //     case 'eth_uninstallFilter':
-  //       this._send(payload)
-  //       result = true
-
-  //     case 'net_version':
-  //       result = this.networkVersion || null
-  //       break
-
-  //     default:
-  //       throw new Error(`unsupported method ${payload.method}`)
-  //   }
-
-  //   return {
-  //     id: payload.id,
-  //     jsonrpc: payload.jsonrpc,
-  //     result
-  //   }
-  // }
 
   isConnected () { // Backwards Compatibility
     return this.connected
@@ -361,14 +348,14 @@ class EthereumProvider extends EventEmitter {
     this.manualChainId = undefined
     this.providerChainId = undefined
     this.networkVersion = undefined
-    this.selectedAddress = undefined
+    this.selectedAddress = ''
   }
 
-  request (payload) {
-    return this._send(payload.method, payload.params, payload.chainId)
+  async request <T> (payload: Payload): Promise<T> {
+    return this.doSend<T>(payload.method, payload.params, payload.chainId)
   }
 
-  setChain (chainId) {
+  setChain (chainId: string | number) {
     if (typeof chainId === 'number') chainId = '0x' + chainId.toString(16)
 
     const chainChanged = (chainId !== this.chainId)
@@ -381,4 +368,4 @@ class EthereumProvider extends EventEmitter {
   }
 }
 
-module.exports = EthereumProvider
+export default EthereumProvider

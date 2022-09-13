@@ -1,9 +1,7 @@
-/* globals it describe beforeEach */
+import assert, { fail } from 'assert'
+import { EventEmitter } from 'events'
 
-const { fail } = require('assert')
-const assert = require('assert')
-const { EventEmitter } = require('stream')
-const EthereumProvider = require('../')
+import EthereumProvider from '../'
 
 class TestConnection extends EventEmitter {
   constructor () {
