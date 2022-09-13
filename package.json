@@ -1,15 +1,16 @@
 {
   "name": "ethereum-provider",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "A standalone EthereumProvider class, just supply the connection",
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
-    "build/"
+    "dist/"
   ],
   "scripts": {
     "build": "tsc",
-    "test": "standard --fix && mocha --require @babel/register"
+    "test": "standard --fix && mocha --require @babel/register",
+    "prepublishOnly": "npm run build"
   },
   "author": {
     "name": "Frame Labs",
