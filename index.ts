@@ -294,19 +294,19 @@ class EthereumProvider extends EventEmitter {
     }
   }
 
-  async sendAsync (rawPayload: Payload, cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
+  async sendAsync (rawPayload: Payload | Payload[], cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
     if (!cb || typeof cb !== 'function') return new Error('Invalid or undefined callback provided to sendAsync')
 
     if (!rawPayload) return cb(new Error('Invalid Payload'))
 
-    const payload: Payload = { ...rawPayload, jsonrpc: '2.0' }
-
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
-    if (Array.isArray(payload)) {
+    if (Array.isArray(rawPayload)) {
+      const payloads: Payload[] = rawPayload.map(p => ({ ...p, jsonrpc: '2.0' }))
       const callback = cb as Callback<Response[]>
-      return this.sendAsyncBatch(payload, callback)
+      return this.sendAsyncBatch(payloads, callback)
     } else {
+      const payload: Payload = { ...(rawPayload as Payload), jsonrpc: '2.0' }
       const callback = cb as Callback<Response>
 
       try {

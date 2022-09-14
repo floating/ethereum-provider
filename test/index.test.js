@@ -42,6 +42,22 @@ beforeEach(async function () {
   await provider.checkConnection()
 })
 
+describe('#sendAsync', () => {
+  it('handles an array of requests', function (done) {
+    const netRequest = { id: 1, method: 'net_version', params: [] }
+    const chainRequest = { id: 2, method: 'eth_chainId', params: [] }
+
+    provider.sendAsync([netRequest, chainRequest], (err, result) => {
+      assert.ifError(err)
+      assert(result.length === 2)
+      assert.deepEqual(result[0], { id: 1, jsonrpc: '2.0', result: '4' })
+      assert.deepEqual(result[1], { id: 2, jsonrpc: '2.0', result: '0x4' })
+
+      done()
+    })
+  })
+})
+
 describe('non-standard interface', () => {
   it('exposes the current chainId', function () { assert(provider.chainId === '0x4') })
   it('exposes the current network version', function () { assert(provider.networkVersion === '4') })
