@@ -54,6 +54,8 @@ class EthereumProvider extends EventEmitter {
     this.connection.on('connect', () => this.checkConnection(1000))
     this.connection.on('close', () => {
       this.connected = false
+      this.attemptedSubscriptions.clear()
+
       this.emit('close')
       this.emit('disconnect')
     })
