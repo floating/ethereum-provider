@@ -60,6 +60,8 @@ class EthereumProvider extends EventEmitter implements Eip1193Provider {
     this.connection.on('connect', () => this.checkConnection(1000))
     this.connection.on('close', () => {
       this.connected = false
+      this.attemptedSubscriptions.clear()
+
       this.emit('close')
       this.emit('disconnect')
     })
