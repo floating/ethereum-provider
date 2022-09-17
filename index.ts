@@ -1,20 +1,16 @@
 import EventEmitter from 'events'
 import { create as createPayload, Payload } from './payload'
 
-import type { Callback, Connection, EventHandler, PendingPromise, Response } from './types'
+import type { Callback, Connection, EthereumProvider, EventHandler, PendingPromise, Response, RequestArguments } from './types'
 
-export declare namespace RPC {
+export declare namespace JsonRpc {
   export { Payload }
   export { Response }
 }
 
-export interface Eip1193Provider {
-  request(payload: Payload): Promise<Response>;
-  connected: boolean;
-  on: (event: string, cb: (data: any) => void) => void;
-}
+export type { EthereumProvider, RequestArguments }
 
-class EthereumProvider extends EventEmitter implements Eip1193Provider {
+class Provider extends EventEmitter implements EthereumProvider {
   private readonly connection: Connection
 
   private readonly eventHandlers: Record<string, EventHandler>
@@ -376,4 +372,4 @@ class EthereumProvider extends EventEmitter implements Eip1193Provider {
   }
 }
 
-export default EthereumProvider
+export default Provider

@@ -1,5 +1,6 @@
-export type Payload = {
-  readonly method: string
+import type { RequestArguments } from './types'
+
+export type Payload = RequestArguments & {
   readonly params: readonly unknown[]
   readonly jsonrpc: '2.0'
   readonly id: number
@@ -10,7 +11,7 @@ type Transaction = {
   chainId?: string
 }
 
-export function create (method: string, params: readonly any[] = [], id: number, targetChain?: string): Payload {
+export function create (method: string, params: readonly unknown[] = [], id: number, targetChain?: string): Payload {
   const payload: Payload = {
     id, method, params, jsonrpc: '2.0'
   }
