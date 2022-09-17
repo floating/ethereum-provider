@@ -223,7 +223,7 @@ class EthereumProvider extends EventEmitter implements Eip1193Provider {
       try {
         const payload = createPayload(method, params, this.nextId++, chainTarget)
 
-        this.promises[payload.id as number] = { 
+        this.promises[payload.id] = { 
           resolve: (result) => resolve(result as T), 
           reject, 
           method: payload.method 
@@ -317,7 +317,7 @@ class EthereumProvider extends EventEmitter implements Eip1193Provider {
 
       try {
         const result = await this.doSend(payload.method, payload.params)
-        callback(null, { id: payload.id as number, jsonrpc: payload.jsonrpc, result })
+        callback(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
       } catch (e) {
         callback(e as Error)
       }
@@ -329,7 +329,7 @@ class EthereumProvider extends EventEmitter implements Eip1193Provider {
       const results = await this.sendBatch(payloads)
 
       const result = results.map((entry, index) => {
-        return { id: payloads[index].id as number, jsonrpc: payloads[index].jsonrpc, result: entry }
+        return { id: payloads[index].id, jsonrpc: payloads[index].jsonrpc, result: entry }
       })
       
       cb(null, result)
