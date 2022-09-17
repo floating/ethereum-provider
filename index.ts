@@ -10,7 +10,8 @@ import type {
   PendingPromise,
   ProviderError,
   RequestArguments,
-  JsonRpcResponse
+  JsonRpcResponse,
+  Payload
 } from './types'
 
 export declare namespace JsonRpc {
@@ -364,8 +365,8 @@ class Provider extends EventEmitter implements EthereumProvider {
     this.selectedAddress = ''
   }
 
-  async request <T> (payload: JsonRpcPayload): Promise<T> {
-    return this.doSend<T>(payload.method, payload.params, payload.chainId)
+  async request <T> (payload: Payload): Promise<T> {
+    return this.doSend<T>(payload.method, payload.params as unknown[], payload.chainId)
   }
 
   setChain (chainId: string | number) {
