@@ -7,6 +7,10 @@ export interface RequestArguments {
   params?: readonly unknown[] | object
 }
 
+export type Payload = RequestArguments & {
+  chainId?: string
+}
+
 export type ProviderError = {
   code: number
   data?: unknown

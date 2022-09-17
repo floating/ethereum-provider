@@ -1,6 +1,6 @@
-import type { RequestArguments } from './types'
+import type { Payload } from './types'
 
-export type JsonRpcPayload = RequestArguments & {
+export type JsonRpcPayload = Payload & {
   readonly params: readonly unknown[]
   readonly jsonrpc: '2.0'
   readonly id: number
