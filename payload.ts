@@ -1,5 +1,6 @@
-export type Payload = {
-  readonly method: string
+import type { RequestArguments } from './types'
+
+export type JsonRpcPayload = RequestArguments & {
   readonly params: readonly unknown[]
   readonly jsonrpc: '2.0'
   readonly id: number
@@ -10,8 +11,8 @@ type Transaction = {
   chainId?: string
 }
 
-export function create (method: string, params: readonly any[] = [], id: number, targetChain?: string): Payload {
-  const payload: Payload = {
+export function create (method: string, params: readonly unknown[] = [], id: number, targetChain?: string): JsonRpcPayload {
+  const payload: JsonRpcPayload = {
     id, method, params, jsonrpc: '2.0'
   }
 
@@ -31,7 +32,7 @@ export function create (method: string, params: readonly any[] = [], id: number,
   return payload
 }
 
-function isChainMismatch (payload: Payload) {
+function isChainMismatch (payload: JsonRpcPayload) {
   if (payload.method !== 'eth_sendTransaction') return false
 
   const tx: Transaction = payload.params[0] || {}
@@ -40,7 +41,7 @@ function isChainMismatch (payload: Payload) {
   return ('chainId' in tx) && parseInt(chainId) !== parseInt(payload.chainId || chainId)
 }
 
-function updatePayloadChain (payload: Payload) {
+function updatePayloadChain (payload: JsonRpcPayload) {
   const tx: Transaction = payload.params[0] || {}
 
   return { ...payload, params: [{ ...tx, chainId: tx.chainId || payload.chainId }, ...payload.params.slice(1)]}
