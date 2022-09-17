@@ -8,7 +8,13 @@ export declare namespace RPC {
   export { Response }
 }
 
-class EthereumProvider extends EventEmitter {
+export interface Eip1193Provider {
+  request(payload: Payload): Promise<Response>;
+  connected: boolean;
+  on: (event: string, cb: (data: any) => void) => void;
+}
+
+class EthereumProvider extends EventEmitter implements Eip1193Provider {
   private readonly connection: Connection
 
   private readonly eventHandlers: Record<string, EventHandler>
@@ -217,7 +223,7 @@ class EthereumProvider extends EventEmitter {
       try {
         const payload = createPayload(method, params, this.nextId++, chainTarget)
 
-        this.promises[payload.id] = { 
+        this.promises[payload.id as number] = { 
           resolve: (result) => resolve(result as T), 
           reject, 
           method: payload.method 
@@ -311,7 +317,7 @@ class EthereumProvider extends EventEmitter {
 
       try {
         const result = await this.doSend(payload.method, payload.params)
-        callback(null, { id: payload.id, jsonrpc: payload.jsonrpc, result })
+        callback(null, { id: payload.id as number, jsonrpc: payload.jsonrpc, result })
       } catch (e) {
         callback(e as Error)
       }
@@ -323,7 +329,7 @@ class EthereumProvider extends EventEmitter {
       const results = await this.sendBatch(payloads)
 
       const result = results.map((entry, index) => {
-        return { id: payloads[index].id, jsonrpc: payloads[index].jsonrpc, result: entry }
+        return { id: payloads[index].id as number, jsonrpc: payloads[index].jsonrpc, result: entry }
       })
       
       cb(null, result)
