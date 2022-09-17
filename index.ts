@@ -1,6 +1,6 @@
 import EventEmitter from 'events'
 
-import { create as createPayload, Payload } from './payload'
+import { create as createPayload, JsonRpcPayload } from './payload'
 
 import type {
   Callback,
@@ -10,12 +10,11 @@ import type {
   PendingPromise,
   ProviderError,
   RequestArguments,
-  Response
+  JsonRpcResponse
 } from './types'
 
 export declare namespace JsonRpc {
-  export { Payload }
-  export { Response }
+  export { JsonRpcPayload as Payload, JsonRpcResponse as Response }
 }
 
 export type { EthereumProvider, RequestArguments, ProviderError }
@@ -218,7 +217,7 @@ class Provider extends EventEmitter implements EthereumProvider {
     }
   }
 
-  private doSend <T> (rawPayload: string | Payload, rawParams: readonly unknown[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
+  private doSend <T> (rawPayload: string | JsonRpcPayload, rawParams: readonly unknown[] = [], targetChain = this.manualChainId, waitForConnection = true): Promise<T> {
     const sendFn = (resolve: (result: T) => void, reject: (err: Error) => void) => {
       const method = (typeof rawPayload === 'object') ? rawPayload.method : rawPayload
       const params = (typeof rawPayload === 'object') ? rawPayload.params : rawParams
@@ -262,7 +261,7 @@ class Provider extends EventEmitter implements EthereumProvider {
     })
   }
 
-  async send (methodOrPayload: string | Payload, callbackOrArgs: Callback<Response> | unknown[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
+  async send (methodOrPayload: string | JsonRpcPayload, callbackOrArgs: Callback<JsonRpcResponse> | unknown[]) { // Send can be clobbered, proxy sendPromise for backwards compatibility
     if (
       typeof methodOrPayload === 'string' &&
       (!callbackOrArgs || Array.isArray(callbackOrArgs))
@@ -277,14 +276,14 @@ class Provider extends EventEmitter implements EthereumProvider {
       typeof callbackOrArgs === 'function'
     ) {
       // a callback was passed to send(), forward everything to sendAsync()
-      const cb = callbackOrArgs as Callback<Response>
+      const cb = callbackOrArgs as Callback<JsonRpcResponse>
       return this.sendAsync(methodOrPayload, cb)
     }
 
-    return this.request(methodOrPayload as Payload)
+    return this.request(methodOrPayload as JsonRpcPayload)
   }
 
-  private sendBatch (requests: Payload[]): Promise<unknown[]> {
+  private sendBatch (requests: JsonRpcPayload[]): Promise<unknown[]> {
     return Promise.all(requests.map(payload => {
       return this.doSend(payload.method, payload.params)
     }))
@@ -308,7 +307,7 @@ class Provider extends EventEmitter implements EthereumProvider {
     }
   }
 
-  async sendAsync (rawPayload: Payload | Payload[], cb: Callback<Response> | Callback<Response[]>) { // Backwards Compatibility
+  async sendAsync (rawPayload: JsonRpcPayload | JsonRpcPayload[], cb: Callback<JsonRpcResponse> | Callback<JsonRpcResponse[]>) { // Backwards Compatibility
     if (!cb || typeof cb !== 'function') return new Error('Invalid or undefined callback provided to sendAsync')
 
     if (!rawPayload) return cb(new Error('Invalid Payload'))
@@ -316,12 +315,12 @@ class Provider extends EventEmitter implements EthereumProvider {
     // sendAsync can be called with an array for batch requests used by web3.js 0.x
     // this is not part of EIP-1193's backwards compatibility but we still want to support it
     if (Array.isArray(rawPayload)) {
-      const payloads: Payload[] = rawPayload.map(p => ({ ...p, jsonrpc: '2.0' }))
-      const callback = cb as Callback<Response[]>
+      const payloads: JsonRpcPayload[] = rawPayload.map(p => ({ ...p, jsonrpc: '2.0' }))
+      const callback = cb as Callback<JsonRpcResponse[]>
       return this.sendAsyncBatch(payloads, callback)
     } else {
-      const payload: Payload = { ...(rawPayload as Payload), jsonrpc: '2.0' }
-      const callback = cb as Callback<Response>
+      const payload: JsonRpcPayload = { ...(rawPayload as JsonRpcPayload), jsonrpc: '2.0' }
+      const callback = cb as Callback<JsonRpcResponse>
 
       try {
         const result = await this.doSend(payload.method, payload.params)
@@ -332,7 +331,7 @@ class Provider extends EventEmitter implements EthereumProvider {
     }
   }
 
-  private async sendAsyncBatch (payloads: Payload[], cb: (err: Error | null, result?: Response[]) => void) {
+  private async sendAsyncBatch (payloads: JsonRpcPayload[], cb: (err: Error | null, result?: JsonRpcResponse[]) => void) {
     try {
       const results = await this.sendBatch(payloads)
 
@@ -365,7 +364,7 @@ class Provider extends EventEmitter implements EthereumProvider {
     this.selectedAddress = ''
   }
 
-  async request <T> (payload: Payload): Promise<T> {
+  async request <T> (payload: JsonRpcPayload): Promise<T> {
     return this.doSend<T>(payload.method, payload.params, payload.chainId)
   }
 
