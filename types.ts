@@ -12,7 +12,7 @@ export type Response = {
   result: unknown
 }
 
-export type ProviderRPCError = {
+export type ProviderError = {
   code: number
   data?: unknown
 }

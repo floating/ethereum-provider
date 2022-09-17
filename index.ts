@@ -1,14 +1,24 @@
 import EventEmitter from 'events'
+
 import { create as createPayload, Payload } from './payload'
 
-import type { Callback, Connection, EthereumProvider, EventHandler, PendingPromise, Response, RequestArguments } from './types'
+import type {
+  Callback,
+  Connection,
+  EthereumProvider,
+  EventHandler,
+  PendingPromise,
+  ProviderError,
+  RequestArguments,
+  Response
+} from './types'
 
 export declare namespace JsonRpc {
   export { Payload }
   export { Response }
 }
 
-export type { EthereumProvider, RequestArguments }
+export type { EthereumProvider, RequestArguments, ProviderError }
 
 class Provider extends EventEmitter implements EthereumProvider {
   private readonly connection: Connection
