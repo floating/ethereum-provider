@@ -38,8 +38,8 @@ class Provider extends EventEmitter implements EthereumProvider {
 
   connected = false
   accounts: string[] = []
-  selectedAddress = ''
-  coinbase = ''
+  selectedAddress?: string = undefined
+  coinbase?: string = undefined
 
   constructor (connection: Connection) {
     super()
@@ -362,7 +362,8 @@ class Provider extends EventEmitter implements EthereumProvider {
     this.manualChainId = undefined
     this.providerChainId = undefined
     this.networkVersion = undefined
-    this.selectedAddress = ''
+    this.selectedAddress = undefined
+    this.coinbase = undefined
   }
 
   async request <T> (payload: Payload): Promise<T> {
