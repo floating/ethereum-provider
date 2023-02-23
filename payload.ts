@@ -21,10 +21,7 @@ export function create (method: string, params: readonly unknown[] = [], id: num
   }
 
   if (payload.method === 'eth_sendTransaction') {
-    const mismatchedChain = isChainMismatch(payload)
-    if (mismatchedChain) {
-      throw new Error(`Payload chainId (${mismatchedChain}) inconsistent with specified target chainId: ${targetChain}`)
-    }
+    checkForChainMismatch(payload)
 
     return updatePayloadChain(payload)
   }
@@ -32,13 +29,18 @@ export function create (method: string, params: readonly unknown[] = [], id: num
   return payload
 }
 
-function isChainMismatch (payload: JsonRpcPayload) {
-  if (payload.method !== 'eth_sendTransaction') return false
-
+function checkForChainMismatch (payload: JsonRpcPayload) {
   const tx: Transaction = payload.params[0] || {}
-  const chainId = tx.chainId as string
 
-  return ('chainId' in tx) && parseInt(chainId) !== parseInt(payload.chainId || chainId)
+  if (payload.method !== 'eth_sendTransaction' || !('chainId' in tx)) return false
+
+  const txChain = tx.chainId as string
+  const txChainId = parseInt(txChain)
+  const targetChainId = parseInt(payload.chainId || txChain)
+
+  if (txChainId !== targetChainId) {
+    throw new Error(`Transaction chain id (${txChainId}) inconsistent with specified target chain id (${targetChainId})`)
+  }
 }
 
 function updatePayloadChain (payload: JsonRpcPayload) {
